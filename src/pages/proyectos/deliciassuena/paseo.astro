@@ -7,7 +7,10 @@ import "maplibre-gl/dist/maplibre-gl.css";
 const stopsJSON = JSON.stringify(stopsData);
 ---
 
-<DeliciasSuenaLayout title="Paseo Sonoro · Delicias Suena">
+<DeliciasSuenaLayout
+  title="Paseo Sonoro por Delicias · Mapa interactivo · Delicias Suena"
+  description="Sigue el itinerario sonoro por las calles del barrio de Delicias en Madrid. Mapa interactivo con puntos de escucha, testimonios y paisajes sonoros de Arganzuela."
+>
   <Fragment slot="head">
     <!-- MapLibre GL JS cargado vía npm bundle (sin CDN externo) -->
     <style is:global>
