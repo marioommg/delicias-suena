@@ -134,6 +134,6 @@ Puedes usar, modificar y redistribuir el código libremente. Si usas los conteni
 
 ## 🤝 Créditos
 
-Desarrollado por [Colectivo Radiopatio](https://colectivoradiopatio.com).
+Desarrollado por [Colectivo Radiopatio](https://colectivoradiopatio.com) — un colectivo de gestión cultural que trabaja en barrios periféricos de Madrid por medio de la programación de actividades culturales, buscando una conexión con las comunidades locales y sus necesidades.
 
 Los datos de mapa provienen de © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), servidos mediante [Protomaps](https://protomaps.com/) (licencia ODbL).
