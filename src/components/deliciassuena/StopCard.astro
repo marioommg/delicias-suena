@@ -1,0 +1,58 @@
+---
+import type { Stop } from "../../data/stops"
+
+export interface Props {
+  stop: Stop
+  isUnlocked: boolean
+  isActive: boolean
+  isCompleted: boolean
+}
+
+const { stop, isUnlocked, isActive, isCompleted } = Astro.props
+---
+
+<a
+  href="#"
+  id={"stop-card-" + stop.id}
+  class:list={[
+    "block w-full rounded-2xl p-5 transition-all duration-200",
+    isActive
+      ? "border-2 border-zinc-900 bg-zinc-50"
+      : isUnlocked
+        ? "border border-zinc-900 bg-white hover:bg-zinc-50"
+        : "border border-zinc-200 bg-white opacity-50 cursor-not-allowed"
+  ]}
+>
+  <div class="flex items-start gap-4">
+    <span class:list={[
+      "flex-shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-full font-sans font-semibold text-sm",
+      isCompleted
+        ? "bg-zinc-900 text-white border border-zinc-900"
+        : isUnlocked
+          ? "border border-zinc-900 text-zinc-900"
+          : "border border-zinc-300 text-zinc-300"
+    ]}>
+      {isCompleted
+        ? <svg class="w-4 h-4" viewBox="0 0 16 16" fill="none"><path d="M4 8l3 3 5-5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        : String(stop.id).padStart(2, "0")
+      }
+    </span>
+    <div class="min-w-0 flex-1">
+      <h3 class:list={[
+        "font-sans font-semibold text-base tracking-tight",
+        isUnlocked ? "text-zinc-900" : "text-zinc-400"
+      ]}>
+        {stop.name}
+      </h3>
+      <p class:list={[
+        "font-sans text-sm leading-relaxed mt-0.5",
+        isUnlocked ? "text-zinc-500" : "text-zinc-300"
+      ]}>
+        {stop.description}
+      </p>
+      <p class="font-sans text-xs text-zinc-400 tracking-wide mt-1">
+        {stop.audios.length} audio{stop.audios.length !== 1 ? "s" : ""}
+      </p>
+    </div>
+  </div>
+</a>

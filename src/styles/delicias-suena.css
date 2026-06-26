@@ -1,0 +1,30 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+
+@font-face {
+  font-family: "alfarn-2";
+  src: url("/fonts/alfarn-2.woff2") format("woff2"),
+       url("/fonts/alfarn-2.woff") format("woff"),
+       url("/fonts/alfarn-2.otf") format("opentype");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 700;
+}
+
+@theme {
+  --font-sans: 'Inter Variable', 'Inter', 'Helvetica Neue', Arial, sans-serif;
+  --font-alfarn: 'alfarn-2', sans-serif;
+}
+
+.logo-text {
+  font-family: var(--font-alfarn);
+  font-size: 96.57px;
+  line-height: 65.28px;
+  letter-spacing: -0.103em;
+  text-align: center;
+  color: #ffffff;
+  -webkit-text-stroke: 5px #000000;
+  paint-order: stroke fill;
+  font-weight: 700;
+  font-style: normal;
+}

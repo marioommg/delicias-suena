@@ -1,0 +1,78 @@
+---
+import { svgNodes, routePath, streets, SVG_VIEWBOX } from "../../data/svg-map"
+---
+
+<svg
+  viewBox={"0 0 " + SVG_VIEWBOX.width + " " + SVG_VIEWBOX.height}
+  class="w-full h-auto border border-zinc-900 rounded-2xl"
+  style="background: #FAFAFA;"
+  role="img"
+  aria-label="Mapa del barrio de Delicias con las 17 paradas del paseo sonoro"
+>
+  <defs>
+    <marker id="marker-locked" markerWidth="28" markerHeight="28" viewBox="0 0 28 28" refX="14" refY="14">
+      <circle cx="14" cy="14" r="12" fill="#e4e4e7" stroke="#a1a1aa" stroke-width="1.5" />
+      <text x="14" y="14" text-anchor="middle" dominant-baseline="central" font-size="11" font-weight="600" fill="#a1a1aa" font-family="Helvetica Neue, Inter, Roboto, sans-serif" />
+    </marker>
+    <marker id="marker-available" markerWidth="28" markerHeight="28" viewBox="0 0 28 28" refX="14" refY="14">
+      <circle cx="14" cy="14" r="12" fill="#ffffff" stroke="#18181b" stroke-width="1.5" />
+    </marker>
+    <marker id="marker-completed" markerWidth="28" markerHeight="28" viewBox="0 0 28 28" refX="14" refY="14">
+      <circle cx="14" cy="14" r="12" fill="#18181b" stroke="#18181b" stroke-width="1.5" />
+      <path d="M8 14l3 3 6-6" stroke="#ffffff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+    </marker>
+  </defs>
+
+  <!-- Streets -->
+  {streets.map((street) => (
+    <path
+      d={street.path}
+      fill="none"
+      stroke="#d4d4d8"
+      stroke-width={street.strokeWidth}
+      class="pointer-events-none"
+    />
+  ))}
+
+  <!-- Route path -->
+  <path
+    d={routePath}
+    fill="none"
+    stroke="#18181b"
+    stroke-width="2"
+    stroke-dasharray="6 4"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    class="pointer-events-none"
+  />
+
+  <!-- Stops nodes -->
+  {svgNodes.map((node) => {
+    const label = String(node.id).padStart(2, "0")
+    return (
+      <g data-stop-id={node.id} class="stop-node cursor-pointer">
+        <circle
+          cx={node.x}
+          cy={node.y}
+          r="14"
+          fill="#ffffff"
+          stroke="#18181b"
+          stroke-width="1.5"
+          class="transition-colors duration-200 hover:fill-zinc-100"
+        />
+        <text
+          x={node.x}
+          y={node.y}
+          text-anchor="middle"
+          dominant-baseline="central"
+          font-size="11"
+          font-weight="600"
+          fill="#18181b"
+          font-family="'Helvetica Neue', Inter, Roboto, sans-serif"
+        >
+          {label}
+        </text>
+      </g>
+    )
+  })}
+</svg>

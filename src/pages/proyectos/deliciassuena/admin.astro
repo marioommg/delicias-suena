@@ -1,0 +1,650 @@
+---
+import DeliciasSuenaLayout from "../../../layouts/DeliciasSuenaLayout.astro";
+const uploadApiUrl = import.meta.env.PUBLIC_UPLOAD_API_URL ?? "";
+---
+
+<DeliciasSuenaLayout title="Administración · Delicias Suena">
+  <!-- SVG Filtro Disolver -->
+  <svg class="absolute w-0 h-0" aria-hidden="true">
+    <defs>
+      <filter id="dissolve-90" x="0%" y="0%" width="100%" height="100%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" seed="2" result="noise"></feTurbulence>
+        <feColorMatrix type="luminanceToAlpha" in="noise" result="noiseAlpha"></feColorMatrix>
+        <feComponentTransfer in="noiseAlpha" result="threshold">
+          <feFuncA type="discrete" tableValues="0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1 1 1 1"></feFuncA>
+        </feComponentTransfer>
+        <feComposite in="SourceGraphic" in2="threshold" operator="in"></feComposite>
+      </filter>
+    </defs>
+  </svg>
+
+  <main class="min-h-screen bg-white text-zinc-900 flex flex-col justify-between">
+    
+    <!-- Contenido principal -->
+    <div class="px-6 py-12 md:px-12 md:py-20 max-w-4xl mx-auto w-full flex-grow">
+      
+      <!-- Logo / Cabecera principal -->
+      <header class="flex flex-col items-center text-center mb-16">
+        <div class="logo-text mb-3" style="filter: url(#dissolve-90);">
+          Delicias<br />Suena
+        </div>
+        <p class="text-zinc-500 text-sm md:text-base tracking-wide uppercase font-semibold animate-char-in">
+          Panel de Control
+        </p>
+      </header>
+
+      <!-- SECCIÓN DE LOGIN -->
+      <section id="login-section" class="max-w-md mx-auto border-2 border-zinc-900 rounded-2xl p-8 md:p-10 bg-white shadow-none fade-in">
+        <h2 class="text-xl font-semibold tracking-tight text-zinc-900 text-center mb-2">Acceso Administrativo</h2>
+        <p class="text-zinc-500 text-sm text-center mb-8 leading-relaxed">
+          Introduce la clave de acceso para revisar y publicar los audios de los ciudadanos.
+        </p>
+        
+        <form id="login-form" class="space-y-6">
+          <div class="space-y-2">
+            <label for="admin-pass-input" class="block text-xs font-bold uppercase tracking-wider text-zinc-600">Contraseña</label>
+            <input 
+              type="password" 
+              id="admin-pass-input" 
+              placeholder="••••••••" 
+              required 
+              autocomplete="current-password"
+              class="w-full px-4 py-3 border-2 border-zinc-200 focus:border-zinc-900 rounded-xl focus:outline-none transition-all text-zinc-900 bg-white"
+            />
+          </div>
+          <button 
+            type="submit" 
+            id="btn-login" 
+            class="w-full bg-zinc-900 border border-zinc-900 text-white font-semibold py-3 px-4 rounded-xl hover:bg-white hover:text-zinc-900 active:scale-[0.98] transition-all cursor-pointer"
+          >
+            Acceder al panel
+          </button>
+          <div id="login-error" class="text-red-600 text-sm text-center font-medium" style="display:none;"></div>
+        </form>
+      </section>
+
+      <!-- SECCIÓN DE ADMIN PANEL -->
+      <section id="admin-section" class="space-y-8 fade-in" style="display:none;">
+        
+        <!-- Cabecera de administración -->
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b-2 border-zinc-900 pb-6">
+          <div>
+            <h2 class="text-2xl font-semibold tracking-tight text-zinc-900">Contribuciones Pendientes</h2>
+            <p id="pending-count" class="text-zinc-500 text-sm">Cargando...</p>
+          </div>
+          <button 
+            type="button" 
+            id="btn-logout" 
+            class="border-2 border-zinc-900 text-zinc-900 hover:bg-zinc-900 hover:text-white font-semibold py-2 px-4 rounded-xl transition-all cursor-pointer text-sm"
+          >
+            Cerrar sesión
+          </button>
+        </div>
+
+        <!-- Listado de audios pendientes -->
+        <div id="pending-list" class="space-y-6">
+          <!-- Dinámico -->
+        </div>
+
+        <!-- Estado vacío -->
+        <div id="empty-state" class="text-center py-16 px-6 border-2 border-dashed border-zinc-400 rounded-2xl bg-white" style="display:none;">
+          <div class="text-4xl mb-4">🎉</div>
+          <h3 class="text-lg font-semibold tracking-tight text-zinc-900 mb-2">¡Todo al día!</h3>
+          <p class="text-zinc-500 text-sm max-w-sm mx-auto">
+            No hay audios pendientes de moderación en este momento. Todas las contribuciones han sido revisadas.
+          </p>
+        </div>
+
+        <!-- SECCIÓN: Audios Aprobados -->
+        <div class="mt-12 pt-10 border-t-2 border-zinc-200">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+            <div>
+              <h2 class="text-2xl font-semibold tracking-tight text-zinc-900">Audios Publicados</h2>
+              <p id="approved-count" class="text-zinc-500 text-sm">Cargando…</p>
+            </div>
+          </div>
+
+          <div id="approved-list" class="space-y-4">
+            <!-- Dinámico -->
+          </div>
+
+          <div id="approved-empty" class="text-center py-10 px-6 border-2 border-dashed border-zinc-200 rounded-2xl" style="display:none;">
+            <p class="text-zinc-400 text-sm">Todavía no hay audios aprobados.</p>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Pie de página -->
+    <footer class="px-6 py-12 md:px-12 md:py-16 max-w-5xl mx-auto w-full">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pt-8 border-t border-zinc-200">
+        <p class="font-sans text-sm text-zinc-400 tracking-wide">
+          Panel de moderación para la Fonoteca del proyecto Delicias Suena.
+        </p>
+        <p class="font-sans text-sm text-zinc-400 tracking-wide">
+          <a href="/" class="hover:text-zinc-600 transition-colors underline underline-offset-2">Colectivo Radiopatio</a>
+          &middot; Espacio libre de cookies.
+        </p>
+      </div>
+    </footer>
+
+  </main>
+
+  <style is:global>
+    /* Estilos minimalistas de las tarjetas en admin */
+    .pending-card {
+      border: 2px solid #18181b;
+      border-radius: 16px;
+      padding: 24px;
+      background: #ffffff;
+      transition: background-color 0.2s ease, box-shadow 0.2s ease;
+      box-shadow: none;
+    }
+    .pending-card:hover {
+      background-color: #fafafa;
+    }
+    
+    .pending-meta-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    
+    .pending-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .pending-badge.new {
+      background: rgba(247, 172, 196, 0.12); /* brand-pink */
+      color: #FF6A00; /* brand-orange */
+      border: 1.5px solid rgba(247, 172, 196, 0.6);
+    }
+    .pending-badge.existing {
+      background: rgba(0, 76, 255, 0.04); /* brand-blue */
+      color: #004CFF; /* brand-blue */
+      border: 1.5px solid rgba(0, 76, 255, 0.2);
+    }
+
+    .pending-date {
+      font-size: 11px;
+      color: #a1a1aa;
+      font-weight: 500;
+    }
+    
+    .pending-card h3 {
+      font-size: 18px;
+      font-weight: 700;
+      margin: 0 0 12px;
+      color: #18181b;
+      letter-spacing: -0.01em;
+    }
+    
+    .pending-details {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 20px;
+      background: #ffffff;
+      padding: 16px;
+      border: 1.5px solid #e4e4e7;
+      border-radius: 12px;
+    }
+    
+    .detail-item {
+      font-size: 13px;
+      line-height: 1.5;
+      color: #27272a;
+    }
+    .detail-item strong {
+      color: #71717a;
+      font-weight: 600;
+      display: inline-block;
+      width: 100px;
+    }
+    
+    .detail-item a {
+      color: #004CFF; /* brand-blue */
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .detail-item a:hover {
+      text-decoration: underline;
+    }
+
+    /* Player controls */
+    .pending-player {
+      background: #ffffff;
+      border: 1.5px solid #e4e4e7;
+      border-radius: 12px;
+      padding: 8px 12px;
+      margin-bottom: 20px;
+    }
+    .pending-player audio {
+      width: 100%;
+      height: 34px;
+      display: block;
+      accent-color: #18181b;
+    }
+    
+    /* Actions */
+    .pending-actions {
+      display: flex;
+      gap: 12px;
+    }
+    .btn-approve {
+      background: #ffffff;
+      color: #16a34a;
+      border: 1.5px solid #16a34a;
+      padding: 10px 18px;
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      flex: 1;
+    }
+    .btn-approve:hover {
+      background: #16a34a;
+      color: #ffffff;
+    }
+    .btn-approve:active {
+      transform: scale(0.97);
+    }
+    
+    .btn-reject {
+      background: #ffffff;
+      color: #dc2626;
+      border: 1.5px solid #dc2626;
+      padding: 10px 18px;
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      flex: 1;
+    }
+    .btn-reject:hover {
+      background: #dc2626;
+      color: #ffffff;
+    }
+    .btn-reject:active {
+      transform: scale(0.97);
+    }
+
+    /* Tarjetas de aprobados */
+    .approved-card {
+      border: 1.5px solid #e4e4e7;
+      border-radius: 14px;
+      padding: 18px 20px;
+      background: #fafafa;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: start;
+      transition: background 0.15s ease;
+    }
+    .approved-card:hover { background: #f4f4f5; }
+    .approved-card-body { min-width: 0; }
+    .approved-card-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #18181b;
+      margin: 0 0 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .approved-card-meta {
+      font-size: 12px;
+      color: #71717a;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .approved-card-meta .pin-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: inline-block;
+      border: 1px solid rgba(0,0,0,0.12);
+    }
+    .approved-card audio {
+      width: 100%;
+      height: 32px;
+      display: block;
+      accent-color: #18181b;
+    }
+    .btn-revoke {
+      background: #fff;
+      color: #dc2626;
+      border: 1.5px solid #fca5a5;
+      padding: 6px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .btn-revoke:hover { background: #dc2626; color: #fff; border-color: #dc2626; }
+    .btn-revoke:active { transform: scale(0.97); }
+
+    /* Animaciones */
+    .fade-in {
+      animation: fadeIn 0.35s ease forwards;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+
+  <script define:vars={{ uploadApiUrl }} is:inline>
+    (function () {
+      const loginSection = document.getElementById("login-section");
+      const adminSection = document.getElementById("admin-section");
+      const loginForm    = document.getElementById("login-form");
+      const passInput    = document.getElementById("admin-pass-input");
+      const loginError   = document.getElementById("login-error");
+      const btnLogout    = document.getElementById("btn-logout");
+      const pendingList  = document.getElementById("pending-list");
+      const emptyState   = document.getElementById("empty-state");
+      const pendingCount = document.getElementById("pending-count");
+      
+      let adminPassword = localStorage.getItem("rp_admin_password") || "";
+
+      // Si ya hay contraseña guardada, intentar cargar
+      if (adminPassword) {
+        verifyPasswordAndLoad();
+      }
+
+      loginForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        adminPassword = passInput.value.trim();
+        verifyPasswordAndLoad();
+      });
+
+      btnLogout.addEventListener("click", () => {
+        adminPassword = "";
+        localStorage.removeItem("rp_admin_password");
+        loginSection.style.display = "block";
+        adminSection.style.display = "none";
+        passInput.value = "";
+      });
+
+      async function verifyPasswordAndLoad() {
+        loginError.style.display = "none";
+        
+        try {
+          const res = await fetch(uploadApiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "list-pending",
+              adminPassword
+            })
+          });
+
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || "Fallo en la autenticación");
+          }
+
+          const { pending } = await res.json();
+          
+          // Guardar en localStorage
+          localStorage.setItem("rp_admin_password", adminPassword);
+          
+          // Mostrar panel admin
+          loginSection.style.display = "none";
+          adminSection.style.display = "block";
+          
+          renderPendingList(pending);
+          loadApprovedList();
+        } catch (err) {
+          console.error(err);
+          loginError.textContent = "Contraseña incorrecta o error de conexión.";
+          loginError.style.display = "block";
+          localStorage.removeItem("rp_admin_password");
+        }
+      }
+
+      function renderPendingList(pending) {
+        pendingList.innerHTML = "";
+        
+        if (!pending || pending.length === 0) {
+          pendingCount.textContent = "0 audios pendientes";
+          emptyState.style.display = "block";
+          return;
+        }
+
+        emptyState.style.display = "none";
+        pendingCount.textContent = `${pending.length} audio${pending.length !== 1 ? "s" : ""} pendiente${pending.length !== 1 ? "s" : ""}`;
+
+        // Ordenar por fecha (más recientes primero)
+        pending.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
+
+        pending.forEach((item) => {
+          const card = document.createElement("div");
+          card.className = "pending-card fade-in";
+          card.id = `pending-card-${item.uuid}`;
+
+          const dateStr = new Date(item.submittedAt).toLocaleString("es-ES", {
+            day: "numeric",
+            month: "short",
+            hour: "2-digit",
+            minute: "2-digit"
+          });
+
+          const typeText = item.isNewStop ? "Nueva Parada" : `Parada Existente #${item.stopId}`;
+          const badgeClass = item.isNewStop ? "new" : "existing";
+          const audioUrl = item.audioUrl || "";
+          
+          card.innerHTML = `
+            <div class="pending-meta-header">
+              <span class="pending-badge ${badgeClass}">${typeText}</span>
+              <span class="pending-date">${dateStr}</span>
+            </div>
+            <h3>${item.stopName || "Sin Nombre"}</h3>
+            
+            <div class="pending-details">
+              <div class="detail-item"><strong>Autor:</strong> ${item.author}</div>
+              <div class="detail-item"><strong>Descripción:</strong> ${item.description || "(sin descripción)"}</div>
+              ${item.pinColor
+                ? `<div class="detail-item"><strong>Color pin:</strong> <span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:14px;height:14px;border-radius:50%;background:${item.pinColor};border:1.5px solid rgba(0,0,0,0.15);flex-shrink:0;display:inline-block;"></span>${item.pinColor}</span></div>`
+                : ""
+              }
+              ${item.isNewStop && item.coords 
+                ? `<div class="detail-item"><strong>Coordenadas:</strong> <a href="https://www.google.com/maps?q=${item.coords.lat},${item.coords.lng}" target="_blank">${item.coords.lat.toFixed(6)}, ${item.coords.lng.toFixed(6)} ↗</a></div>`
+                : ""
+              }
+            </div>
+
+
+            <div class="pending-player">
+              <audio controls src="${audioUrl}"></audio>
+            </div>
+
+            <div class="pending-actions">
+              <button type="button" class="btn-approve" onclick="window.__ADMIN_APPROVE__('${item.uuid}')">Aprobar y publicar</button>
+              <button type="button" class="btn-reject" onclick="window.__ADMIN_REJECT__('${item.uuid}')">Rechazar</button>
+            </div>
+          `;
+          
+          pendingList.appendChild(card);
+        });
+      }
+
+      window.__ADMIN_APPROVE__ = async function (uuid) {
+        if (!confirm("¿Estás seguro de que deseas aprobar este audio y publicarlo inmediatamente?")) return;
+        
+        setCardLoading(uuid, true);
+        try {
+          const res = await fetch(uploadApiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "approve",
+              uuid,
+              adminPassword
+            })
+          });
+
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || "Fallo en la aprobación.");
+          }
+
+          verifyPasswordAndLoad();
+        } catch (err) {
+          alert(`Error al aprobar: ${err.message}`);
+          setCardLoading(uuid, false);
+        }
+      };
+
+      window.__ADMIN_REJECT__ = async function (uuid) {
+        if (!confirm("¿Estás seguro de que deseas rechazar y eliminar permanentemente este audio?")) return;
+        
+        setCardLoading(uuid, true);
+        try {
+          const res = await fetch(uploadApiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "reject",
+              uuid,
+              adminPassword
+            })
+          });
+
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || "Fallo al rechazar.");
+          }
+
+          verifyPasswordAndLoad();
+        } catch (err) {
+          alert(`Error al rechazar: ${err.message}`);
+          setCardLoading(uuid, false);
+        }
+      };
+
+      function setCardLoading(uuid, loading) {
+        const card = document.getElementById(`pending-card-${uuid}`);
+        if (!card) return;
+        
+        const buttons = card.querySelectorAll("button");
+        buttons.forEach(btn => {
+          btn.disabled = loading;
+          btn.style.opacity = loading ? "0.5" : "1";
+        });
+      }
+
+      // ── Audios Aprobados ──────────────────────────────────────────────────────
+
+      const approvedList  = document.getElementById("approved-list");
+      const approvedEmpty = document.getElementById("approved-empty");
+      const approvedCount = document.getElementById("approved-count");
+
+      async function loadApprovedList() {
+        try {
+          const res = await fetch(`/audio/approved.json?t=${Date.now()}`);
+          if (!res.ok) throw new Error("No se pudo cargar approved.json");
+          const items = await res.json();
+
+          approvedList.innerHTML = "";
+
+          if (!Array.isArray(items) || items.length === 0) {
+            approvedCount.textContent = "0 audios publicados";
+            approvedEmpty.style.display = "block";
+            return;
+          }
+
+          approvedEmpty.style.display = "none";
+          approvedCount.textContent = `${items.length} audio${items.length !== 1 ? "s" : ""} publicado${items.length !== 1 ? "s" : ""}`;
+
+          // Más recientes primero
+          [...items].sort((a, b) => new Date(b.approvedAt) - new Date(a.approvedAt)).forEach(item => {
+            const card = document.createElement("div");
+            card.className = "approved-card fade-in";
+            card.id = `approved-card-${item.uuid}`;
+
+            const approvedStr = new Date(item.approvedAt).toLocaleString("es-ES", {
+              day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
+            });
+            const submittedStr = new Date(item.submittedAt).toLocaleString("es-ES", {
+              day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
+            });
+            const audioUrl = `/audio/${encodeURIComponent(item.audioFile)}`;
+            const pinDot = item.pinColor
+              ? `<span class="pin-dot" style="background:${item.pinColor};" title="Color: ${item.pinColor}"></span>`
+              : "";
+            const stopLabel = item.isNewStop ? "Nueva parada" : `Parada #${item.stopId}`;
+
+            card.innerHTML = `
+              <div class="approved-card-body">
+                <p class="approved-card-title">${item.stopName || "Sin nombre"}</p>
+                <div class="approved-card-meta">
+                  ${pinDot}
+                  <span>${stopLabel}</span>
+                  <span>·</span>
+                  <span>${item.author || "Anónimo"}</span>
+                  <span>·</span>
+                  <span title="Enviado: ${submittedStr}">Aprobado: ${approvedStr}</span>
+                </div>
+                <p style="font-size:12px;color:#52525b;margin:0 0 10px;line-height:1.5;">${item.description || ""}</p>
+                <audio controls src="${audioUrl}" preload="none"></audio>
+              </div>
+              <button type="button" class="btn-revoke" onclick="window.__ADMIN_REVOKE__('${item.uuid}')">Eliminar</button>
+            `;
+            approvedList.appendChild(card);
+          });
+        } catch (err) {
+          approvedCount.textContent = "Error al cargar los audios publicados";
+          console.error(err);
+        }
+      }
+
+      window.__ADMIN_REVOKE__ = async function (uuid) {
+        if (!confirm("¿Eliminar este audio de la fonoteca pública? Esta acción no se puede deshacer.")) return;
+
+        const card = document.getElementById(`approved-card-${uuid}`);
+        if (card) { card.style.opacity = "0.4"; card.style.pointerEvents = "none"; }
+
+        try {
+          const res = await fetch(uploadApiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "revoke", uuid, adminPassword })
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || "Fallo al eliminar.");
+          }
+          loadApprovedList();
+        } catch (err) {
+          alert(`Error: ${err.message}`);
+          if (card) { card.style.opacity = ""; card.style.pointerEvents = ""; }
+        }
+      };
+
+    })();
+  </script>
+</DeliciasSuenaLayout>

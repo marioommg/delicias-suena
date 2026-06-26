@@ -1,0 +1,37 @@
+# build output
+dist/
+# generated types
+.astro/
+
+# dependencies
+node_modules/
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# environment variables
+.env
+.env.production
+.env.local
+
+# macOS-specific files
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+
+# Tiles (archivo PMTiles de Madrid — ver README para instrucciones de descarga)
+public/tiles/*.pmtiles
+
+# Fuentes comerciales — no redistribuir (usar solo en producción propia)
+# Las fuentes open source (alfarn-2, Inter) sí están incluidas en el repo
+public/fonts/HelveticaNeue*.woff2
+public/fonts/HelveticaNeue*.woff
+public/fonts/HelveticaNeue*.ttf

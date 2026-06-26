@@ -1,0 +1,3089 @@
+---
+import DeliciasSuenaLayout from "../../../layouts/DeliciasSuenaLayout.astro";
+import { stopsDataFull as stopsData } from "../../../data/stops";
+import logoPequeño from "../../../assets/images/deliciassuena/logo-pequeño.png";
+import "maplibre-gl/dist/maplibre-gl.css";
+
+const stopsJSON = JSON.stringify(stopsData);
+const uploadApiUrl = import.meta.env.PUBLIC_UPLOAD_API_URL ?? "";
+---
+
+<DeliciasSuenaLayout title="Fonoteca · Delicias Suena">
+  <Fragment slot="head">
+    <style is:global>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; overflow: hidden; height: 100%; }
+
+      #fonoteca-layout {
+        position: fixed; inset: 0; overflow: hidden;
+      }
+
+      #fonoteca-map {
+        position: absolute; inset: 0;
+      }
+
+      /* ── Custom Attribution Control ── */
+      .custom-attrib-container {
+        display: none;
+        align-items: center;
+        pointer-events: auto;
+      }
+
+      .btn-info-toggle {
+        width: 24px !important;
+        height: 24px !important;
+        border: 1px solid #18181b !important;
+        border-radius: 4px !important;
+        background: #fff !important;
+        color: #18181b !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        cursor: pointer !important;
+        font-family: Georgia, 'Times New Roman', serif !important;
+        font-size: 14px !important;
+        font-style: italic !important;
+        font-weight: bold !important;
+        box-shadow: none !important;
+        outline: none !important;
+        padding: 0 !important;
+        transition: background 0.15s, transform 0.1s;
+      }
+
+      .btn-info-toggle:hover {
+        background: #fafafa !important;
+      }
+
+      .btn-info-toggle:active {
+        transform: scale(0.95);
+      }
+
+      .info-content {
+        max-width: 0;
+        opacity: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        background: rgba(255, 255, 255, 0.95);
+        border: 1px solid transparent;
+        border-radius: 4px;
+        font-size: 11px;
+        font-family: 'Helvetica Neue', Inter, sans-serif !important;
+        color: #18181b;
+        padding: 4px 0;
+        margin-left: 0;
+        transition: max-width 0.3s cubic-bezier(0.16, 1, 0.3, 1), 
+                    opacity 0.2s ease, 
+                    padding 0.2s ease, 
+                    margin-left 0.2s ease, 
+                    border-color 0.2s ease;
+        box-shadow: none;
+        pointer-events: none;
+      }
+
+      .info-content a {
+        color: #004CFF;
+        text-decoration: none;
+        font-weight: 500;
+      }
+
+      .info-content a:hover {
+        text-decoration: underline;
+      }
+
+      .custom-attrib-container.open .info-content {
+        max-width: 300px;
+        opacity: 1;
+        padding: 4px 8px;
+        margin-left: 6px;
+        border-color: #18181b;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+        pointer-events: auto;
+      }
+
+      .maplibregl-ctrl-group {
+        border: 1px solid #18181b !important;
+        border-radius: 4px !important;
+        overflow: hidden;
+        box-shadow: none !important;
+      }
+      .maplibregl-ctrl-group button {
+        width: 24px !important; height: 24px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        color: #18181b !important;
+        border: none !important;
+        border-bottom: 1px solid #18181b !important;
+        background: transparent !important;
+        cursor: pointer;
+        font-size: 14px !important;
+        font-family: 'Helvetica Neue', Inter, sans-serif !important;
+        font-weight: 600;
+      }
+      .maplibregl-ctrl-group button:last-child { border-bottom: none !important; }
+      .maplibregl-ctrl-group button:hover { background: #fafafa !important; }
+
+      /* ── Marcador pulsante ── */
+      @keyframes pulse-ring {
+        0%   { transform: scale(0.8); opacity: 0.8; }
+        70%  { transform: scale(1.4); opacity: 0;   }
+        100% { transform: scale(1.4); opacity: 0;   }
+      }
+      .marker-pulse-ring {
+        position: absolute; inset: -6px; border-radius: 50%;
+        background: #18181b; animation: pulse-ring 2s ease-out infinite;
+        pointer-events: none;
+      }
+
+      @keyframes fade-in {
+        from { opacity: 0; transform: translateY(6px); }
+        to   { opacity: 1; transform: translateY(0);   }
+      }
+      .fade-in { animation: fade-in 0.3s ease forwards; }
+
+      /* ── Tooltip ── */
+      .stop-tooltip {
+        position: absolute; z-index: 1500; background: #fff;
+        border: 1.5px solid #18181b; border-radius: 12px;
+        padding: 12px 14px; max-width: 240px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        opacity: 0; pointer-events: none;
+        transition: opacity 0.12s ease;
+        font-family: 'Helvetica Neue', Inter, sans-serif;
+      }
+      .stop-tooltip.visible { opacity: 1; pointer-events: auto; }
+
+      /* ── Panel — mobile bottom sheet ── */
+      #fonoteca-panel {
+        position: fixed; z-index: 1000;
+        bottom: 0; left: 0; right: 0;
+        height: 100dvh;
+        background: #fff;
+        overflow: hidden;
+        border-top: 1px solid #18181b;
+        /* Default = state 1 (mid) */
+        transform: translateY(55%);
+        transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        will-change: transform;
+      }
+      #fonoteca-panel.no-transition { transition: none !important; }
+      #fonoteca-panel[data-panel="0"] { transform: translateY(calc(100% - 28px)); }
+      #fonoteca-panel[data-panel="2"] { transform: translateY(5%); }
+
+      /* ── Handle ── */
+      #panel-handle {
+        position: absolute; top: 0; left: 0; right: 0;
+        height: 28px; display: flex; align-items: center;
+        justify-content: center; cursor: grab; z-index: 2;
+        background: #fff;
+        touch-action: none;
+        -webkit-user-select: none; user-select: none;
+      }
+      #panel-handle:active { cursor: grabbing; }
+      .handle-bar {
+        width: 40px; height: 4px; border-radius: 2px;
+        background: #d4d4d8; transition: background 0.2s;
+      }
+      #panel-handle:hover .handle-bar { background: #a1a1aa; }
+
+      /* ── Panel inner ── */
+      #panel-inner {
+        position: absolute; top: 27px; left: 0; right: 0; bottom: 0;
+        overflow-y: auto; -webkit-overflow-scrolling: touch;
+        overflow-anchor: none;
+      }
+
+      /* ── Panel header ── */
+      .panel-header {
+        position: sticky; top: 0; z-index: 1; background: #fff;
+        padding: 8px 24px;
+        border-bottom: 1px solid #e4e4e7;
+      }
+      .panel-header h1 {
+        font-family: 'Helvetica Neue', Inter, sans-serif;
+        font-size: 22px; font-weight: 600; letter-spacing: -0.02em;
+        color: #18181b; margin: 0 0 6px;
+      }
+      .panel-header p {
+        font-family: 'Helvetica Neue', Inter, sans-serif;
+        font-size: 13px; color: #71717a; line-height: 1.55; margin: 0 0 14px;
+      }
+      .panel-header-actions {
+        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      }
+      .link-paseo {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 7px 14px; border: 1px solid #18181b; border-radius: 10px;
+        font-size: 12px; font-weight: 600; color: #18181b; text-decoration: none;
+        font-family: 'Helvetica Neue', Inter, sans-serif;
+        transition: background 0.15s;
+      }
+      .link-paseo:hover { background: #fafafa; }
+      /* ── FAB Contribuir ── */
+      .btn-upload-fab {
+        position: absolute;
+        z-index: 900;
+        width: 48px;
+        height: 48px;
+        padding: 0;
+        margin: 0;
+        border-radius: 50%;
+        background: #18181b;
+        border: 1.5px solid #18181b;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        right: 16px;
+        bottom: calc(var(--panel-visible-height, 45dvh) + 16px);
+        transition: bottom 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+                    right 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+                    background 0.15s,
+                    transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      }
+      .btn-upload-fab:hover {
+        background: #27272a;
+        transform: scale(1.05);
+      }
+      .btn-upload-fab:active {
+        transform: scale(0.95);
+      }
+      .btn-upload-fab.no-transition {
+        transition: none !important;
+      }
+
+      #fonoteca-panel[data-panel="0"] ~ #btn-upload-audio,
+      #fonoteca-panel[data-panel="0"] ~ #btn-paseo-floating {
+        --panel-visible-height: 28px;
+      }
+      #fonoteca-panel[data-panel="1"] ~ #btn-upload-audio,
+      #fonoteca-panel[data-panel="1"] ~ #btn-paseo-floating {
+        --panel-visible-height: 45dvh;
+      }
+      #fonoteca-panel[data-panel="2"] ~ #btn-upload-audio,
+      #fonoteca-panel[data-panel="2"] ~ #btn-paseo-floating {
+        --panel-visible-height: 95dvh;
+      }
+
+      /* ── Logo delicias suena ── */
+      .logo-container {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        z-index: 900;
+        transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .logo-container.no-transition {
+        transition: none !important;
+      }
+
+      #fonoteca-panel[data-panel="0"] ~ .logo-container {
+        --panel-width: 28px;
+      }
+      #fonoteca-panel[data-panel="1"] ~ .logo-container {
+        --panel-width: 420px;
+      }
+      #fonoteca-panel[data-panel="2"] ~ .logo-container {
+        --panel-width: min(50vw, 700px);
+      }
+
+      /* ── Botón paseo flotante ── */
+      .btn-paseo-floating {
+        position: absolute;
+        z-index: 900;
+        left: 16px;
+        bottom: calc(var(--panel-visible-height, 45dvh) + 16px);
+        width: 100%;
+        max-width: 180px;
+        height: 48px;
+        padding: 0;
+        margin: 0;
+        background: #f4f4f5;
+        border: 1.5px solid #18181b;
+        color: #18181b;
+        display: flex;
+        align-items: center;
+        text-decoration: none;
+        border-radius: 24px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        overflow: hidden;
+        transition: bottom 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+                    max-width 0.6s cubic-bezier(0.77, 0, 0.175, 1),
+                    background 0.3s ease,
+                    border-color 0.3s ease,
+                    transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      }
+      .btn-paseo-floating.no-transition {
+        transition: none !important;
+      }
+      .btn-paseo-floating.collapsed:not(:hover) {
+        max-width: 48px;
+        background: #18181b;
+        border-color: #18181b;
+      }
+      
+      .btn-paseo-icon {
+        width: 40px;
+        height: 40px;
+        margin-left: 2.5px;
+        border-radius: 50%;
+        background: #18181b;
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        transition: transform 0.6s cubic-bezier(0.77, 0, 0.175, 1),
+                    background 0.3s ease,
+                    color 0.3s ease;
+      }
+      .btn-paseo-floating.collapsed:not(:hover) .btn-paseo-icon {
+        background: transparent;
+        color: #ffffff;
+        transform: rotate(360deg);
+      }
+      
+      .btn-paseo-label {
+        font-size: 13px;
+        font-weight: 600;
+        font-family: 'Helvetica Neue', Inter, sans-serif;
+        padding-left: 8px;
+        padding-right: 16px;
+        white-space: nowrap;
+        opacity: 1;
+        color: #18181b;
+        transition: opacity 0.4s ease, padding 0.6s cubic-bezier(0.77, 0, 0.175, 1);
+      }
+      .btn-paseo-floating.collapsed:not(:hover) .btn-paseo-label {
+        opacity: 0;
+        padding-right: 0;
+      }
+
+      .btn-paseo-floating:hover {
+        max-width: 180px;
+        background: #f4f4f5;
+        border-color: #18181b;
+        transform: scale(1.05);
+      }
+      .btn-paseo-floating:hover .btn-paseo-icon {
+        background: #18181b;
+        color: #ffffff;
+        transform: rotate(0deg);
+      }
+      .btn-paseo-floating:hover .btn-paseo-label {
+        opacity: 1;
+        padding-right: 16px;
+      }
+      .btn-paseo-floating:active {
+        transform: scale(0.95);
+      }
+
+      #stops-list {
+        padding-bottom: var(--stops-list-padding, 80px);
+      }
+      @media (max-width: 767px) {
+        #stops-list {
+          padding-bottom: var(--stops-list-padding, 55vh);
+        }
+      }
+
+      /* ── Stop cards ── */
+      .stop-card {
+        border-bottom: 1px solid #e4e4e7;
+        transition: background 0.15s;
+      }
+      .stop-card.highlighted { background: #fafafa; border-left: 3px solid #18181b; }
+      .stop-card-header {
+        display: flex; align-items: flex-start;
+        padding: 14px 24px; cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .stop-card-header:hover { background: #fafafa; }
+      .stop-card-body { min-width: 0; flex: 1; }
+      .stop-card-body h3 {
+        font-family: 'Helvetica Neue', Inter, sans-serif;
+        font-size: 14px; font-weight: 600; color: #18181b;
+        margin: 0 0 2px; line-height: 1.3;
+      }
+      .stop-card-body .desc {
+        font-family: 'Helvetica Neue', Inter, sans-serif;
+        font-size: 12px; color: #71717a; line-height: 1.5; margin: 0 0 4px;
+      }
+      .stop-card-body .meta {
+        font-family: 'Helvetica Neue', Inter, sans-serif;
+        font-size: 11px; color: #a1a1aa;
+      }
+
+      /* ── Audio player ── */
+      .stop-player-wrapper {
+        overflow: hidden; max-height: 0;
+        transition: max-height 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .stop-player-wrapper.open { max-height: 2000px; }
+      .stop-player-inner {
+        padding: 0 24px 16px;
+      }
+      .stop-player-inner .audio-item {
+        margin-bottom: 10px;
+      }
+      .stop-player-inner .audio-item:last-child { margin-bottom: 0; }
+      .stop-player-inner .audio-title {
+        font-family: 'Helvetica Neue', Inter, sans-serif;
+        font-size: 11px; font-weight: 500; color: #52525b;
+        margin: 0 0 4px; letter-spacing: 0.01em;
+      }
+      .stop-player-inner audio {
+        width: 100%; height: 34px; border-radius: 8px; display: block;
+        accent-color: #18181b;
+      }
+
+
+      .audio-item.citizen-audio {
+        margin-top: 8px;
+        margin-bottom: 8px;
+      }
+      .audio-item.citizen-audio .audio-title {
+        font-weight: 600;
+      }
+
+      /* ── Selector de color del pin ── */
+      .upload-color-field label {
+        display: block;
+        font-size: 12px;
+        font-weight: 700;
+        color: #3f3f46;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 10px;
+      }
+      .color-swatches {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      .color-swatch {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        border: 2px solid transparent;
+        cursor: pointer;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+        outline: none;
+        position: relative;
+        flex-shrink: 0;
+      }
+      .color-swatch:hover:not(:disabled) {
+        transform: scale(1.18);
+      }
+      .color-swatch.selected {
+        box-shadow: 0 0 0 2px #fff, 0 0 0 4px currentColor;
+      }
+      .color-swatch:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
+      }
+      .color-custom-input {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        border: 2px solid #d4d4d8;
+        cursor: pointer;
+        padding: 1px;
+        background: none;
+        overflow: hidden;
+        flex-shrink: 0;
+      }
+      .color-custom-input:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
+      }
+      .color-locked-note {
+        display: none;
+        font-size: 11px;
+        color: #71717a;
+        margin-top: 6px;
+        font-style: italic;
+      }
+      .color-locked-note.visible {
+        display: block;
+      }
+
+      /* ── Modal de subida ciudadana ── */
+      .upload-modal-overlay {
+        position: fixed; inset: 0; z-index: 3000;
+        background: rgba(0,0,0,0.45); backdrop-filter: blur(3px);
+        display: flex; align-items: flex-end; justify-content: center;
+        opacity: 0; pointer-events: none;
+        transition: opacity 0.25s ease;
+      }
+      .upload-modal-overlay.open { opacity: 1; pointer-events: auto; }
+
+      .upload-modal-box {
+        width: 100%; max-width: 560px; max-height: 92dvh;
+        background: #fff;
+        border-radius: 20px 20px 0 0;
+        border: 1.5px solid #18181b; border-bottom: none;
+        overflow-y: auto;
+        transform: translateY(24px);
+        transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        font-family: 'Helvetica Neue', Inter, sans-serif;
+      }
+      .upload-modal-overlay.open .upload-modal-box { transform: translateY(0); }
+
+      .upload-modal-header {
+        padding: 20px 24px 14px;
+        border-bottom: 1px solid #e4e4e7;
+        display: flex; align-items: flex-start; justify-content: space-between;
+        position: sticky; top: 0; background: #fff; z-index: 1;
+      }
+      .upload-modal-header h2 {
+        font-size: 18px; font-weight: 600; letter-spacing: -0.02em;
+        color: #18181b; margin: 0 0 4px;
+      }
+      .upload-modal-header p {
+        font-size: 12px; color: #71717a; margin: 0; line-height: 1.5;
+      }
+      .upload-modal-close {
+        flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%;
+        background: #f4f4f5; border: none; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 15px; color: #18181b; margin-left: 12px; margin-top: 2px;
+        transition: background 0.15s;
+      }
+      .upload-modal-close:hover { background: #e4e4e7; }
+
+      .upload-modal-body { padding: 20px 24px 32px; }
+
+      .upload-field { margin-bottom: 16px; }
+      .upload-field label {
+        display: block; font-size: 12px; font-weight: 600; color: #18181b;
+        margin-bottom: 6px; letter-spacing: 0.01em;
+      }
+      .upload-field label .optional {
+        font-weight: 400; color: #a1a1aa; margin-left: 4px;
+      }
+      .upload-field select,
+      .upload-field input[type="text"],
+      .upload-field textarea {
+        width: 100%; padding: 9px 12px;
+        border: 1.5px solid #e4e4e7; border-radius: 10px;
+        font-size: 13px; color: #18181b;
+        font-family: 'Helvetica Neue', Inter, sans-serif;
+        background: #fff; outline: none;
+        transition: border-color 0.15s;
+        -webkit-appearance: none; appearance: none;
+      }
+      .upload-field select:focus,
+      .upload-field input[type="text"]:focus,
+      .upload-field textarea:focus { border-color: #18181b; }
+      .upload-field textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
+
+      .upload-dropzone {
+        position: relative;
+        width: 100%; padding: 24px 16px;
+        border: 2px dashed #d4d4d8; border-radius: 12px;
+        display: flex; flex-direction: column; align-items: center; gap: 6px;
+        cursor: pointer; transition: border-color 0.15s, background 0.15s;
+        background: #fafafa; text-align: center; overflow: hidden;
+      }
+      .upload-dropzone:hover,
+      .upload-dropzone.drag-over { border-color: #18181b; background: #f4f4f5; }
+      .upload-dropzone.has-file { border-style: solid; border-color: #18181b; background: #f4f4f5; }
+      .upload-dropzone input[type="file"] {
+        position: absolute; inset: 0; opacity: 0; cursor: pointer;
+        width: 100%; height: 100%; z-index: 1;
+      }
+      .upload-dropzone-icon { font-size: 28px; pointer-events: none; }
+      .upload-dropzone-label {
+        font-size: 13px; font-weight: 500; color: #18181b; pointer-events: none;
+      }
+      .upload-dropzone-hint {
+        font-size: 11px; color: #a1a1aa; pointer-events: none;
+      }
+
+      .upload-submit {
+        width: 100%; padding: 12px 16px; margin-top: 6px;
+        background: #18181b; color: #fff; border: none; border-radius: 12px;
+        font-size: 14px; font-weight: 600; cursor: pointer;
+        font-family: 'Helvetica Neue', Inter, sans-serif;
+        transition: background 0.15s;
+      }
+      .upload-submit:hover:not(:disabled) { background: #27272a; }
+      .upload-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+
+      .upload-progress { margin-top: 16px; text-align: center; }
+      .upload-progress-bar-track {
+        height: 4px; background: #e4e4e7; border-radius: 2px; overflow: hidden;
+        margin-bottom: 10px;
+      }
+      .upload-progress-bar-fill {
+        height: 100%; background: #18181b; border-radius: 2px;
+        width: 0%; transition: width 0.25s ease;
+      }
+      .upload-progress-label {
+        font-size: 12px; color: #71717a;
+      }
+
+      .upload-success { text-align: center; padding: 16px 0; }
+      .upload-success-icon { font-size: 40px; margin-bottom: 12px; }
+      .upload-success h3 {
+        font-size: 16px; font-weight: 600; color: #18181b; margin: 0 0 8px;
+      }
+      .upload-success p {
+        font-size: 13px; color: #71717a; line-height: 1.6; margin: 0;
+      }
+
+      .upload-error {
+        background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px;
+        padding: 10px 14px; margin-top: 12px;
+        font-size: 12px; color: #dc2626; line-height: 1.5;
+      }
+
+      .upload-legal-checkbox-container {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        font-size: 11px;
+        color: #71717a;
+        line-height: 1.4;
+        margin-top: 16px;
+        margin-bottom: 12px;
+        text-align: left;
+      }
+      .upload-legal-checkbox-container input[type="checkbox"] {
+        margin-top: 2px;
+        cursor: pointer;
+        accent-color: #18181b;
+      }
+      .upload-legal-checkbox-container label {
+        cursor: pointer;
+        font-weight: 400 !important;
+        color: #71717a !important;
+      }
+      .upload-legal-checkbox-container a {
+        color: #004CFF;
+        text-decoration: none;
+        font-weight: 500;
+      }
+      .upload-legal-checkbox-container a:hover {
+        text-decoration: underline;
+      }
+
+      /* ── Selector de tipo de audio (Pestañas) ── */
+      .audio-tab-toggle {
+        display: flex;
+        gap: 4px;
+        background: #f4f4f5;
+        border-radius: 10px;
+        padding: 3px;
+        margin-bottom: 12px;
+      }
+      .audio-tab-btn {
+        flex: 1;
+        padding: 8px 10px;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 600;
+        color: #71717a;
+        background: transparent;
+        font-family: 'Helvetica Neue', Inter, sans-serif;
+        transition: background 0.15s, color 0.15s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+      }
+      .audio-tab-btn.active {
+        background: #fff;
+        color: #18181b;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      }
+
+      /* ── Contenedor de la grabadora ── */
+      .recorder-container {
+        border: 1.5px solid #18181b;
+        border-radius: 12px;
+        padding: 24px 16px;
+        background: #fafafa;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 150px;
+        text-align: center;
+      }
+
+      /* Estado inicial (Ready) */
+      .recorder-state-ready {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+      }
+      .btn-record-action.start {
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background: #ef4444; /* red-500 */
+        border: 2px solid #ef4444;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: transform 0.2s, background 0.2s, box-shadow 0.2s;
+        box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+      }
+      .btn-record-action.start:hover {
+        transform: scale(1.05);
+        background: #dc2626;
+        box-shadow: 0 6px 16px rgba(220, 38, 38, 0.4);
+      }
+      .btn-record-action.start:active {
+        transform: scale(0.95);
+      }
+      .recorder-hint {
+        font-size: 13px;
+        font-weight: 500;
+        color: #18181b;
+        margin: 0;
+      }
+
+      /* Estado activo (Grabando / Pausado) */
+      .recorder-state-active {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+      }
+      .recorder-timer-bar {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-family: monospace;
+        font-size: 16px;
+        font-weight: bold;
+        color: #18181b;
+      }
+      
+      @keyframes pulse-red {
+        0% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.2); opacity: 0.4; }
+        100% { transform: scale(1); opacity: 1; }
+      }
+      .recorder-pulse-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #ef4444;
+        display: inline-block;
+        animation: pulse-red 1.5s infinite ease-in-out;
+      }
+      /* Cuando está en pausa, el punto rojo no pulsa y es gris */
+      .recorder-state-active.paused .recorder-pulse-dot {
+        background: #71717a;
+        animation: none;
+      }
+      .recorder-max-time {
+        color: #a1a1aa;
+        font-size: 13px;
+      }
+
+      /* Visualizador Canvas */
+      .visualizer-wrapper {
+        width: 100%;
+        height: 48px;
+        background: #f4f4f5;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid #e4e4e7;
+      }
+      .recorder-visualizer {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      /* Controles de la grabadora */
+      .recorder-controls {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      .btn-recorder-ctrl {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        border: 1.5px solid #18181b;
+        background: #fff;
+        color: #18181b;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: transform 0.15s, background 0.15s;
+      }
+      .btn-recorder-ctrl:hover {
+        transform: scale(1.05);
+        background: #f4f4f5;
+      }
+      .btn-recorder-ctrl:active {
+        transform: scale(0.95);
+      }
+      
+      .btn-recorder-ctrl.pause.active {
+        background: #18181b;
+        color: #fff;
+      }
+
+      /* Vista previa de grabación */
+      .recorder-state-preview {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+      }
+      .preview-player {
+        width: 100%;
+        text-align: center;
+      }
+      .preview-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: #18181b;
+        margin: 0 0 10px;
+      }
+      .recorder-preview-audio {
+        width: 100%;
+        height: 36px;
+        border-radius: 8px;
+        accent-color: #18181b;
+        outline: none;
+      }
+      .preview-actions {
+        display: flex;
+        gap: 10px;
+      }
+      .btn-record-discard {
+        padding: 6px 12px;
+        border: 1px solid #dc2626;
+        border-radius: 8px;
+        background: transparent;
+        color: #dc2626;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.15s, color 0.15s;
+      }
+      .btn-record-discard:hover {
+        background: #fef2f2;
+      }
+
+      /* Estado de Error */
+      .recorder-state-error {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+      }
+      .error-icon {
+        font-size: 24px;
+      }
+      .error-msg {
+        font-size: 13px;
+        color: #dc2626;
+        margin: 0;
+        font-weight: 500;
+        line-height: 1.5;
+      }
+      .btn-record-retry {
+        padding: 6px 14px;
+        background: #18181b;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      .btn-record-retry:hover {
+        background: #27272a;
+      }
+
+      /* ── Location toggle ── */
+      .loc-toggle {
+        display: flex; gap: 4px;
+        background: #f4f4f5; border-radius: 10px; padding: 3px;
+        margin-bottom: 16px;
+      }
+      .loc-toggle-btn {
+        flex: 1; padding: 7px 10px;
+        border: none; border-radius: 8px; cursor: pointer;
+        font-size: 12px; font-weight: 600; color: #71717a;
+        background: transparent;
+        font-family: 'Helvetica Neue', Inter, sans-serif;
+        transition: background 0.15s, color 0.15s;
+        white-space: nowrap;
+      }
+      .loc-toggle-btn.active {
+        background: #fff; color: #18181b;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      }
+
+      /* ── Sort toggle ── */
+      .sort-toggle {
+        display: flex; gap: 4px;
+        background: #f4f4f5; border-radius: 10px; padding: 3px;
+        margin-top: 0;
+      }
+      .sort-toggle-btn {
+        flex: 1; padding: 6px 8px;
+        border: none; border-radius: 8px; cursor: pointer;
+        font-size: 11px; font-weight: 600; color: #71717a;
+        background: transparent;
+        font-family: 'Helvetica Neue', Inter, sans-serif;
+        transition: background 0.15s, color 0.15s;
+        white-space: nowrap;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+      }
+      .sort-toggle-btn.active {
+        background: #fff; color: #18181b;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      }
+
+      /* ── Coordenadas y Selección de Ubicación ── */
+      .picker-coords-container {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border: 1.5px solid #e4e4e7;
+        border-radius: 10px;
+        padding: 6px 10px;
+        background: #fafafa;
+        transition: border-color 0.15s;
+      }
+      .picker-coords-container:focus-within {
+        border-color: #18181b;
+      }
+      .picker-coords-container select {
+        border: none !important;
+        padding: 4px 0 !important;
+        background: transparent !important;
+        margin: 0 !important;
+        border-radius: 0 !important;
+      }
+      .picker-coords {
+        flex: 1;
+        font-size: 12.5px;
+        font-family: monospace;
+        color: #71717a;
+        min-height: 16px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .picker-coords.has-coords {
+        color: #18181b;
+        font-weight: 500;
+      }
+      .btn-change-location {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        border: 1.5px solid #18181b;
+        border-radius: 8px;
+        background: #fff;
+        color: #18181b;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: 'Helvetica Neue', Inter, sans-serif;
+        transition: background 0.15s, transform 0.1s;
+      }
+      .btn-change-location:hover {
+        background: #fafafa;
+      }
+      .btn-change-location:active {
+        transform: scale(0.97);
+      }
+
+      /* ── Banner de Selección en Mapa Principal ── */
+      .map-selection-banner {
+        position: fixed;
+        top: 16px;
+        left: 50%;
+        transform: translate(-50%, -120%);
+        z-index: 2000;
+        width: calc(100% - 32px);
+        max-width: 480px;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        border: 1.5px solid #18181b;
+        border-radius: 16px;
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+        padding: 12px 16px;
+        transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        pointer-events: auto;
+      }
+      .map-selection-banner.active {
+        transform: translate(-50%, 0);
+      }
+      .banner-content {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .banner-text {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .banner-title {
+        font-family: 'Helvetica Neue', Inter, sans-serif;
+        font-size: 13.5px;
+        font-weight: 600;
+        color: #18181b;
+      }
+      .banner-subtitle {
+        font-family: 'Helvetica Neue', Inter, sans-serif;
+        font-size: 11px;
+        color: #71717a;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .btn-cancel-selection {
+        flex-shrink: 0;
+        padding: 6px 12px;
+        border: 1px solid #e4e4e7;
+        border-radius: 8px;
+        background: #f4f4f5;
+        color: #18181b;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: 'Helvetica Neue', Inter, sans-serif;
+        transition: background 0.15s, border-color 0.15s;
+      }
+      .btn-cancel-selection:hover {
+        background: #e4e4e7;
+        border-color: #d4d4d8;
+      }
+      
+      /* Cursor de mapa en modo selección */
+      .selecting-location canvas {
+        cursor: crosshair !important;
+      }
+
+      /* ── Desktop ── */
+      @media (min-width: 768px) {
+        #fonoteca-panel {
+          top: 0; bottom: 0; left: auto; right: 0;
+          width: 420px; height: 100%;
+          border-top: none; border-left: 1px solid #18181b;
+          /*
+           * FIX: En desktop el panel se controla con `width`, no con `transform`.
+           * Reseteamos el transform mobile aquí para que el panel sea visible.
+           */
+          transform: none !important;
+          transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        /* FIX: asegurarse de que los data-panel no aplican translateY en desktop */
+        #fonoteca-panel[data-panel="0"] { width: 28px; transform: none !important; }
+        #fonoteca-panel[data-panel="2"] { width: 50vw; max-width: 700px; transform: none !important; }
+        #panel-inner { top: 0; left: 27px; }
+        #fonoteca-panel[data-panel="0"] #panel-inner { visibility: hidden; }
+        #stops-list { padding-bottom: 24px; }
+
+        #fonoteca-panel[data-panel="0"] ~ #btn-upload-audio {
+          --panel-width: 28px;
+        }
+        #fonoteca-panel[data-panel="1"] ~ #btn-upload-audio {
+          --panel-width: 420px;
+        }
+        #fonoteca-panel[data-panel="2"] ~ #btn-upload-audio {
+          --panel-width: min(50vw, 700px);
+        }
+
+        #fonoteca-panel[data-panel="0"] ~ .logo-container {
+          --panel-width: 28px;
+        }
+        #fonoteca-panel[data-panel="1"] ~ .logo-container {
+          --panel-width: 420px;
+        }
+        #fonoteca-panel[data-panel="2"] ~ .logo-container {
+          --panel-width: min(50vw, 700px);
+        }
+
+        .btn-upload-fab {
+          bottom: 24px;
+          right: calc(var(--panel-width, 420px) + 24px);
+        }
+
+        .logo-container {
+          right: calc(var(--panel-width, 420px) + 12px);
+        }
+
+        .btn-paseo-floating {
+          bottom: 24px;
+          left: 24px;
+        }
+
+        #panel-handle {
+          top: 0; left: 0; right: auto; bottom: 0;
+          width: 28px; height: 100%;
+          cursor: col-resize;
+          flex-direction: column;
+        }
+        #panel-handle:active { cursor: col-resize; }
+        .handle-bar { width: 4px; height: 40px; }
+
+        /* Modal: centrado en desktop */
+        .upload-modal-overlay { align-items: center; }
+        .upload-modal-box {
+          border-radius: 20px;
+          border: 1.5px solid #18181b;
+          max-height: 85dvh;
+        }
+      }
+    </style>
+  </Fragment>
+
+  <div id="fonoteca-layout">
+    <!-- MAPA -->
+    <div id="fonoteca-map">
+      <div id="stop-tooltip" class="stop-tooltip"></div>
+    </div>
+
+    <!-- ATRIBUCIÓN PERSONALIZADA -->
+    <div id="custom-attribution" class="maplibregl-ctrl custom-attrib-container">
+      <button type="button" id="btn-info-toggle" class="btn-info-toggle" aria-label="Información del mapa">
+        i
+      </button>
+      <div class="info-content">
+        &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>
+      </div>
+    </div>
+
+    <!-- PANEL LATERAL -->
+    <div id="fonoteca-panel" data-panel="1">
+      <div id="panel-handle">
+        <div class="handle-bar"></div>
+      </div>
+
+      <div id="panel-inner">
+        <div class="panel-header">
+          <div class="sort-toggle" role="group" aria-label="Ordenar paradas">
+            <button type="button" class="sort-toggle-btn active" data-sort="default">
+              Por defecto
+            </button>
+            <button type="button" class="sort-toggle-btn" data-sort="recent">
+              Más recientes
+            </button>
+            <button type="button" class="sort-toggle-btn" id="btn-sort-proximity" data-sort="proximity">
+              Cercanía
+            </button>
+          </div>
+        </div>
+
+        <div id="stops-list">
+          {stopsData.map((stop) => (
+            <div class="stop-card" id={`stop-card-${stop.id}`} data-stop-id={stop.id}>
+              <div class="stop-card-header">
+                <div class="stop-card-body">
+                  <h3>{stop.name}</h3>
+                  <p class="desc">{stop.description}</p>
+                  <span class="meta">
+                    {stop.audios.length} audio{stop.audios.length !== 1 ? "s" : ""}
+                    {stop.audios.some(a => a.category !== "general")
+                      ? ` · ${stop.audios.map(a => a.category).filter(Boolean).join(", ")}`
+                      : ""
+                    }
+                  </span>
+                </div>
+              </div>
+              <div class="stop-player-wrapper" id={`player-${stop.id}`}>
+                <div class="stop-player-inner">
+                      {stop.audios.map((audio) => (
+                    <div class="audio-item">
+                      <p class="audio-title">{audio.title}</p>
+                      <audio controls preload="none">
+                        <source src={`/audio/${encodeURIComponent(audio.file)}`} type="audio/ogg" />
+                      </audio>
+                      {audio.transcription && (
+                        <div class="transcription-container" style="margin-top:6px;">
+                          <button
+                            type="button"
+                            class="transcription-toggle-btn"
+                            style="display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;color:#71717a;background:none;border:none;padding:0;cursor:pointer;font-family:inherit;transition:color 0.15s;"
+                            onmouseenter="this.style.color='#18181b'"
+                            onmouseleave="if (this.nextElementSibling.classList.contains('hidden')) { this.style.color='#71717a'; } else { this.style.color='#18181b'; }"
+                            onclick="
+                              const container = this.nextElementSibling;
+                              const textSpan = this.querySelector('.toggle-text');
+                              const svg = this.querySelector('svg');
+                              container.classList.toggle('hidden');
+                              const isHidden = container.classList.contains('hidden');
+                              textSpan.textContent = isHidden ? 'Ver transcripción' : 'Ocultar transcripción';
+                              svg.style.transform = isHidden ? 'rotate(0deg)' : 'rotate(180deg)';
+                            "
+                          >
+                            <span class="toggle-text">Ver transcripción</span>
+                            <svg style="width:10px;height:10px;transition:transform 0.2s;transform-origin:center;transform:rotate(0deg);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                              <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                            </svg>
+                          </button>
+                          <div class="hidden transcription-text" style="margin-top:6px;padding:10px 12px;background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;font-size:11px;color:#52525b;line-height:1.5;white-space:pre-line;">
+                            {audio.transcription}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+
+    <!-- BANNER SELECCIÓN DE MAPA -->
+    <div id="map-selection-banner" class="map-selection-banner" style="display: none;">
+      <div class="banner-content">
+        <div class="banner-text">
+          <span class="banner-title">📍 Selecciona el lugar en el mapa</span>
+          <span class="banner-subtitle">Haz clic en una parada existente o en cualquier punto del mapa</span>
+        </div>
+        <button type="button" class="btn-cancel-selection" id="btn-cancel-selection">Cancelar</button>
+      </div>
+    </div>
+
+    <!-- BOTÓN CONTRIBUIR FAB -->
+    <button id="btn-upload-audio" class="btn-upload-fab" aria-label="Contribuir audio">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"></line>
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+      </svg>
+    </button>
+
+    <!-- LOGO DELICIAS SUENA -->
+    <div class="logo-container">
+      <a href="/proyectos/deliciassuena/" style="display:block">
+        <img
+          src={logoPequeño.src}
+          alt="Delicias Suena"
+          style="max-height:33px;width:auto;display:block"
+        />
+      </a>
+    </div>
+
+    <!-- BOTÓN PASEO FLOTANTE -->
+    <a href="/proyectos/deliciassuena/paseo" id="btn-paseo-floating" class="btn-paseo-floating" aria-label="Iniciar paseo guiado">
+      <div class="btn-paseo-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
+          <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
+        </svg>
+      </div>
+      <span class="btn-paseo-label">Paseo Sonoro</span>
+    </a>
+
+    <!-- MODAL: Contribuir audio -->
+    <div
+      id="upload-modal"
+      class="upload-modal-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="upload-modal-title"
+      aria-hidden="true"
+    >
+      <div class="upload-modal-box" id="upload-modal-box">
+        <div class="upload-modal-header">
+          <div>
+            <h2 id="upload-modal-title">Comparte un sonido</h2>
+          </div>
+          <button class="upload-modal-close" id="upload-modal-close" aria-label="Cerrar">✕</button>
+        </div>
+
+        <div class="upload-modal-body">
+          <!-- Estado: formulario -->
+          <form id="upload-form" novalidate>
+
+            <!-- Selector de ubicación unificado (sin tabs ni dropdowns) -->
+            <div class="upload-field">
+              <label id="location-field-label">Ubicación seleccionada</label>
+              <div class="picker-coords-container">
+                <div class="picker-coords" id="picker-coords">📍 Ninguna ubicación seleccionada</div>
+                <button type="button" class="btn-change-location" id="btn-change-location" title="Cambiar ubicación en el mapa">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"></polygon>
+                    <line x1="9" y1="3" x2="9" y2="18"></line>
+                    <line x1="15" y1="6" x2="15" y2="21"></line>
+                  </svg>
+                  Cambiar
+                </button>
+              </div>
+            </div>
+
+            <!-- Campo visible solo para nuevas ubicaciones -->
+            <div class="upload-field" id="new-location-name-field" style="display: none;">
+              <label for="upload-new-name">Nombre del lugar</label>
+              <input
+                type="text"
+                id="upload-new-name"
+                placeholder="Ej: Plaza de los Naranjos, Bar Fuentes…"
+              />
+            </div>
+
+            <div class="upload-field">
+              <label for="upload-description">Descripción del sonido</label>
+              <textarea
+                id="upload-description"
+                placeholder="¿Qué grabaste? ¿Hay algún contexto que quieras compartir?"
+                required
+              ></textarea>
+            </div>
+
+            <div class="upload-field">
+              <label for="upload-author">
+                Tu nombre <span class="optional">(opcional)</span>
+              </label>
+              <input type="text" id="upload-author" placeholder="Anónimo" />
+            </div>
+
+            <!-- Selector de color del pin -->
+            <div class="upload-field upload-color-field" id="upload-color-field">
+              <label>Color de tu punto en el mapa</label>
+              <div class="color-swatches" id="color-swatches" role="group" aria-label="Elige el color de tu punto en el mapa">
+                <button type="button" class="color-swatch selected" data-color="#FF6A00" style="background:#FF6A00;color:#FF6A00;" aria-label="Naranja" title="Naranja"></button>
+                <button type="button" class="color-swatch" data-color="#E63C5C" style="background:#E63C5C;color:#E63C5C;" aria-label="Rojo" title="Rojo"></button>
+                <button type="button" class="color-swatch" data-color="#7B2FBE" style="background:#7B2FBE;color:#7B2FBE;" aria-label="Violeta" title="Violeta"></button>
+                <button type="button" class="color-swatch" data-color="#004CFF" style="background:#004CFF;color:#004CFF;" aria-label="Azul" title="Azul"></button>
+                <button type="button" class="color-swatch" data-color="#00B4A0" style="background:#00B4A0;color:#00B4A0;" aria-label="Turquesa" title="Turquesa"></button>
+                <button type="button" class="color-swatch" data-color="#2DA44E" style="background:#2DA44E;color:#2DA44E;" aria-label="Verde" title="Verde"></button>
+                <button type="button" class="color-swatch" data-color="#FFB800" style="background:#FFB800;color:#FFB800;" aria-label="Amarillo" title="Amarillo"></button>
+                <button type="button" class="color-swatch" data-color="#FF4FCD" style="background:#FF4FCD;color:#FF4FCD;" aria-label="Rosa" title="Rosa"></button>
+                <input type="color" id="upload-color-custom" class="color-custom-input" value="#FF6A00" aria-label="Color personalizado" title="Color personalizado" />
+              </div>
+              <p class="color-locked-note" id="color-locked-note">🔒 Esta parada ya tiene un color asignado por otro aporte ciudadano.
+              </p>
+            </div>
+
+            <div class="upload-field">
+              <label>Origen del audio</label>
+              
+              <!-- Selector de Pestañas (Tabs) -->
+              <div class="audio-tab-toggle" role="tablist" aria-label="Origen del audio">
+                <button type="button" class="audio-tab-btn" id="tab-btn-upload" role="tab" aria-selected="false" aria-controls="audio-tab-upload">
+                  📁 Subir Archivo
+                </button>
+                <button type="button" class="audio-tab-btn active" id="tab-btn-record" role="tab" aria-selected="true" aria-controls="audio-tab-record">
+                  🎙️ Grabar Sonido
+                </button>
+              </div>
+
+              <!-- Pestaña 1: Subir Archivo -->
+              <div id="audio-tab-upload" style="display: none;" role="tabpanel" aria-labelledby="tab-btn-upload">
+                <div class="upload-dropzone" id="upload-dropzone">
+                  <input
+                    type="file"
+                    id="upload-file"
+                    accept="audio/*,.wav,.mp3,.ogg,.m4a,.aac,.flac,.opus"
+                  />
+                  <div class="upload-dropzone-icon" id="upload-dropzone-icon">🎙️</div>
+                  <div class="upload-dropzone-label" id="upload-dropzone-label">
+                    Arrastra un audio o haz clic para seleccionar
+                  </div>
+                  <div class="upload-dropzone-hint">WAV, MP3, OGG, M4A · máx. 100 MB</div>
+                </div>
+              </div>
+
+              <!-- Pestaña 2: Grabar Sonido -->
+              <div id="audio-tab-record" role="tabpanel" aria-labelledby="tab-btn-record">
+                <div class="recorder-container" id="recorder-container">
+                  <!-- Estado 1: Listo para grabar -->
+                  <div id="recorder-state-ready" class="recorder-state-ready">
+                    <button type="button" id="btn-record-start" class="btn-record-action start" aria-label="Iniciar grabación">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+                        <path d="M19 10v1a7 7 0 0 1-14 0v-1"/>
+                        <line x1="12" y1="19" x2="12" y2="22"/>
+                      </svg>
+                    </button>
+                    <p class="recorder-hint">Toca el micrófono para grabar</p>
+                  </div>
+
+                  <!-- Estado 2: Grabación Activa / Pausada -->
+                  <div id="recorder-state-active" class="recorder-state-active" style="display: none;">
+                    <div class="recorder-timer-bar">
+                      <span class="recorder-pulse-dot"></span>
+                      <span id="recorder-timer">00:00</span>
+                      <span class="recorder-max-time">/ 05:00</span>
+                    </div>
+                    
+                    <div class="visualizer-wrapper">
+                      <canvas id="recorder-visualizer" class="recorder-visualizer"></canvas>
+                    </div>
+
+                    <div class="recorder-controls">
+                      <button type="button" id="btn-record-pause" class="btn-recorder-ctrl pause" title="Pausar grabación">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                          <line x1="10" y1="4" x2="10" y2="20"></line>
+                          <line x1="14" y1="4" x2="14" y2="20"></line>
+                        </svg>
+                      </button>
+                      
+                      <button type="button" id="btn-record-stop" class="btn-recorder-ctrl stop" title="Detener y guardar">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                          <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Estado 3: Preescucha / Vista Previa -->
+                  <div id="recorder-state-preview" class="recorder-state-preview" style="display: none;">
+                    <div class="preview-player">
+                      <p class="preview-title">Grabación completada</p>
+                      <audio id="recorder-preview-audio" controls class="recorder-preview-audio"></audio>
+                    </div>
+                    
+                    <div class="preview-actions">
+                      <button type="button" id="btn-record-discard" class="btn-record-discard" title="Descartar grabación">
+                        ✕ Descartar y grabar de nuevo
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Estado 4: Error (Micrófono inaccesible) -->
+                  <div id="recorder-state-error" class="recorder-state-error" style="display: none;">
+                    <div class="error-icon">⚠️</div>
+                    <p id="recorder-error-msg" class="error-msg">No se pudo acceder al micrófono.</p>
+                    <button type="button" id="btn-record-retry" class="btn-record-retry">Reintentar</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div id="upload-error" class="upload-error" style="display:none;"></div>
+            
+            <!-- Descargo legal de Términos y Privacidad -->
+            <div class="upload-legal-checkbox-container">
+              <input type="checkbox" id="upload-legal-checkbox" required />
+              <label for="upload-legal-checkbox">
+                Acepto los <a href="/aviso-legal/" target="_blank">Términos de Uso</a> y la <a href="/politica-de-privacidad/" target="_blank">Política de Privacidad</a>
+              </label>
+            </div>
+
+            <button type="submit" class="upload-submit" id="upload-submit">Enviar audio</button>
+          </form>
+
+          <!-- Estado: progreso -->
+          <div id="upload-progress-section" style="display:none;" class="upload-progress">
+            <div class="upload-progress-bar-track">
+              <div class="upload-progress-bar-fill" id="upload-progress-bar"></div>
+            </div>
+            <div class="upload-progress-label" id="upload-progress-label">Preparando…</div>
+          </div>
+
+          <!-- Estado: éxito -->
+          <div id="upload-success-section" style="display:none;" class="upload-success">
+            <div class="upload-success-icon">✅</div>
+            <h3>¡Sonido recibido!</h3>
+            <p>
+              Gracias por contribuir al archivo sonoro de Delicias.<br />
+              El equipo de Colectivo Radiopatio revisará tu grabación antes de publicarla en la fonoteca.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script define:vars={{ stopsJSON, uploadApiUrl }} is:inline>
+    window.__FONOTECA_STOPS__ = stopsJSON;
+    window.__UPLOAD_API_URL__ = uploadApiUrl;
+  </script>
+
+  <script>
+    // @ts-nocheck
+    import maplibregl from "maplibre-gl";
+    import * as pmtiles from "pmtiles";
+
+    (function () {
+      const stopsData     = JSON.parse(window.__FONOTECA_STOPS__);
+      const uploadApiUrl  = window.__UPLOAD_API_URL__ || "";
+      const panel         = document.getElementById("fonoteca-panel");
+      const handle        = document.getElementById("panel-handle");
+      const stopsList     = document.getElementById("stops-list");
+
+      let selectedStopId = null;
+      let panelState = 1;
+      let map = null;
+      const markerRefs = {};
+      let activeTooltip = null;
+      let hideTooltipTimeoutId = null;
+
+      /*
+       * FIX: Guardamos la última posición de drag en variables JS en vez de
+       * leerla del DOM (el DOM puede estar desincronizado al resetear el style).
+       *
+       * lastDragPct  — % de translateY en mobile (estado 1 = 55%)
+       * lastDragPx   — ancho del panel en px en desktop (estado 1 = 420px)
+       */
+      let lastDragPct = 55;
+      let lastDragPx  = 420;
+
+      function isMobile() {
+        return window.innerWidth < 768;
+      }
+
+      function getTargetMapPadding(state) {
+        const padding = { top: 0, bottom: 0, left: 0, right: 0 };
+        const s = state !== undefined ? state : panelState;
+        if (isMobile()) {
+          let visibleHeight = 0;
+          if (s === 0) visibleHeight = 28;
+          else if (s === 1) visibleHeight = window.innerHeight * 0.45;
+          else if (s === 2) visibleHeight = window.innerHeight * 0.95;
+          padding.bottom = visibleHeight;
+        } else {
+          let panelWidth = 0;
+          if (s === 0) panelWidth = 28;
+          else if (s === 1) panelWidth = 420;
+          else if (s === 2) panelWidth = Math.min(window.innerWidth * 0.5, 700);
+          padding.right = panelWidth;
+        }
+        return padding;
+      }
+
+      // ─── Estado del panel ──────────────────────────────────────────────────
+
+      function setPanelState(state, animate) {
+        panelState = state;
+        if (animate === false) panel.classList.add("no-transition");
+        panel.setAttribute("data-panel", String(state));
+        if (animate === false) {
+          void panel.offsetHeight;
+          panel.classList.remove("no-transition");
+        }
+        // Sincronizar variables de tracking con el nuevo estado
+        if (isMobile()) {
+          if (state === 0)      lastDragPct = 100;
+          else if (state === 1) lastDragPct = 55;
+          else                  lastDragPct = 5;
+        } else {
+          if (state === 0)      lastDragPx = 28;
+          else if (state === 1) lastDragPx = 420;
+          else                  lastDragPx = Math.min(window.innerWidth * 0.5, 700);
+        }
+
+        // Actualizar padding inferior del listado para que los últimos elementos (ej: Afro Conciencia) no se corten
+        if (stopsList) {
+          if (isMobile()) {
+            let paddingVal = "80px";
+            if (state === 0) paddingVal = "95vh";
+            else if (state === 1) paddingVal = "55vh";
+            else if (state === 2) paddingVal = "5vh";
+            stopsList.style.setProperty("--stops-list-padding", paddingVal);
+          } else {
+            stopsList.style.removeProperty("--stops-list-padding");
+          }
+        }
+
+        // Recalcular centro del mapa si hay una parada seleccionada
+        if (selectedStopId !== null && map) {
+          const stop = stopsData.find((s) => s.id === selectedStopId);
+          if (stop) {
+            map.flyTo({
+              center: [stop.coords[1], stop.coords[0]],
+              padding: getTargetMapPadding(state),
+              duration: 400
+            });
+          }
+        }
+      }
+
+      function cyclePanelState() {
+        setPanelState((panelState + 1) % 3);
+      }
+
+      // ─── Drag ──────────────────────────────────────────────────────────────
+
+      let isDragging    = false;
+      let mouseDown     = false;
+      let dragDidMove   = false;
+      let dragStartClientY = 0;
+      let dragStartClientX = 0;
+      let dragStartPct  = 55;
+      let dragStartPx   = 420;
+
+      function onDragStart(clientY, clientX) {
+        if (mapSelectionMode) return;
+        isDragging = true;
+        panel.classList.add("no-transition");
+        const fab = document.getElementById("btn-upload-audio");
+        if (fab) fab.classList.add("no-transition");
+        const logo = document.querySelector(".logo-container");
+        if (logo) logo.classList.add("no-transition");
+        const paseoBtn = document.getElementById("btn-paseo-floating");
+        if (paseoBtn) paseoBtn.classList.add("no-transition");
+        dragStartClientY = clientY;
+        dragStartClientX = clientX;
+        dragStartPct = lastDragPct;
+        dragStartPx  = panel.offsetWidth;
+      }
+
+      function onDragMove(clientY, clientX) {
+        if (!isDragging) return;
+
+        const fab = document.getElementById("btn-upload-audio");
+        const logo = document.querySelector(".logo-container");
+        const paseoBtn = document.getElementById("btn-paseo-floating");
+        if (isMobile()) {
+          // Mobile: controlar translateY
+          const deltaPct = ((clientY - dragStartClientY) / window.innerHeight) * 100;
+          const newY = Math.max(2, Math.min(100, dragStartPct + deltaPct));
+          lastDragPct = newY;
+          panel.style.transform = `translateY(${newY}%)`;
+          panel.style.width = "";
+
+          const visibleHeight = 100 - newY;
+          if (fab) fab.style.bottom = `calc(${visibleHeight}vh + 16px)`;
+          if (paseoBtn) paseoBtn.style.bottom = `calc(${visibleHeight}vh + 16px)`;
+
+          // Actualizar padding inferior del listado en vivo durante el arrastre
+          if (stopsList) {
+            stopsList.style.setProperty("--stops-list-padding", `${newY}vh`);
+          }
+        } else {
+          // Desktop: controlar width.
+          // El handle está en el borde IZQUIERDO del panel (que está a la derecha),
+          // así que arrastrar a la izquierda (deltaX negativo) = panel más ancho.
+          const deltaX = clientX - dragStartClientX;
+          const newW = Math.max(28, Math.min(Math.min(window.innerWidth * 0.72, 900), dragStartPx - deltaX));
+          lastDragPx = newW;
+          panel.style.width = `${newW}px`;
+          panel.style.transform = "";
+
+          if (fab) fab.style.right = `${newW + 24}px`;
+          if (logo) logo.style.right = `${newW + 12}px`;
+        }
+      }
+
+      function snapPanel() {
+        // Limpiar estilos inline antes de aplicar las transiciones CSS
+        panel.classList.remove("no-transition");
+        panel.style.transform = "";
+        panel.style.width = "";
+
+        const fab = document.getElementById("btn-upload-audio");
+        if (fab) {
+          fab.classList.remove("no-transition");
+          fab.style.bottom = "";
+          fab.style.right = "";
+        }
+        const logo = document.querySelector(".logo-container");
+        if (logo) {
+          logo.classList.remove("no-transition");
+          logo.style.right = "";
+        }
+        const paseoBtn = document.getElementById("btn-paseo-floating");
+        if (paseoBtn) {
+          paseoBtn.classList.remove("no-transition");
+          paseoBtn.style.bottom = "";
+        }
+
+        if (isMobile()) {
+          const y = lastDragPct;
+          if (y > 75)      setPanelState(0);
+          else if (y < 30) setPanelState(2);
+          else             setPanelState(1);
+        } else {
+          const w  = lastDragPx;
+          const vw = window.innerWidth;
+          if (w < 120)          setPanelState(0);
+          else if (w > vw * 0.4) setPanelState(2);
+          else                   setPanelState(1);
+        }
+      }
+
+      function onDragEnd() {
+        if (!isDragging) return;
+        isDragging = false;
+        snapPanel();
+      }
+
+      // Eventos touch (mobile)
+      handle.addEventListener("touchstart", (e) => {
+        const t = e.touches[0];
+        dragDidMove = false;
+        onDragStart(t.clientY, t.clientX);
+      }, { passive: true });
+
+      handle.addEventListener("touchmove", (e) => {
+        dragDidMove = true;
+        const t = e.touches[0];
+        onDragMove(t.clientY, t.clientX);
+      }, { passive: true });
+
+      handle.addEventListener("touchend",   onDragEnd, { passive: true });
+      handle.addEventListener("touchcancel", onDragEnd, { passive: true });
+
+      // Eventos mouse (desktop drag)
+      handle.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        mouseDown   = true;
+        dragDidMove = false;
+        onDragStart(e.clientY, e.clientX);
+      });
+
+      document.addEventListener("mousemove", (e) => {
+        if (!mouseDown) return;
+        const dx = Math.abs(e.clientX - dragStartClientX);
+        const dy = Math.abs(e.clientY - dragStartClientY);
+        if (dx > 3 || dy > 3) dragDidMove = true;
+        onDragMove(e.clientY, e.clientX);
+      });
+
+      document.addEventListener("mouseup", () => {
+        if (!mouseDown) return;
+        mouseDown = false;
+        onDragEnd();
+      });
+
+      // Click en handle = ciclar estado (solo si no hubo drag real)
+      handle.addEventListener("click", (e) => {
+        if (dragDidMove) return;
+        e.stopPropagation();
+        cyclePanelState();
+      });
+
+      // ─── Tooltip ───────────────────────────────────────────────────────────
+
+      function showTooltip(stop, markerEl) {
+        hideTooltip();
+        const tip = document.getElementById("stop-tooltip");
+        if (!tip) return;
+        const pistas = stop.audios.length;
+        tip.innerHTML = `
+          <div style="color:#18181b;">
+            <h4 style="margin:0 0 4px;font-size:13px;font-weight:600;line-height:1.2;">${stop.name}</h4>
+            <p style="margin:0;font-size:11px;color:#71717a;line-height:1.4;">${stop.description} · ${pistas} pista${pistas !== 1 ? "s" : ""}</p>
+          </div>
+        `;
+        const mapEl   = document.getElementById("fonoteca-map");
+        const mapRect = mapEl.getBoundingClientRect();
+        const mr      = markerEl.getBoundingClientRect();
+        tip.style.left      = (mr.left - mapRect.left + mr.width / 2) + "px";
+        tip.style.bottom    = (mapRect.height - (mr.top - mapRect.top) + 8) + "px";
+        tip.style.transform = "translateX(-50%)";
+        requestAnimationFrame(() => tip.classList.add("visible"));
+        activeTooltip = tip;
+
+        tip.onmouseenter = () => {
+          if (hideTooltipTimeoutId) { clearTimeout(hideTooltipTimeoutId); hideTooltipTimeoutId = null; }
+        };
+        tip.onmouseleave = () => {
+          if (hideTooltipTimeoutId) clearTimeout(hideTooltipTimeoutId);
+          hideTooltipTimeoutId = setTimeout(() => { hideTooltip(); hideTooltipTimeoutId = null; }, 200);
+        };
+      }
+
+      function hideTooltip() {
+        if (hideTooltipTimeoutId) { clearTimeout(hideTooltipTimeoutId); hideTooltipTimeoutId = null; }
+        const tip = document.getElementById("stop-tooltip");
+        if (tip) { tip.classList.remove("visible"); tip.onmouseenter = null; tip.onmouseleave = null; }
+        activeTooltip = null;
+      }
+
+      // ─── Marcadores ────────────────────────────────────────────────────────
+
+      function makeMarkerIcon(stopId, isActive) {
+        // Buscar el primer audio ciudadano (ya aprobado) con pinColor
+        const stopObj = stopsData.find(s => s.id === stopId);
+        const citizenAudio = stopObj && stopObj.audios.find(a => a.origin === "citizen" || a.origin === "ciudadano" || a.category === "ciudadano");
+        const citizenColor = (citizenAudio && citizenAudio.pinColor) ? citizenAudio.pinColor : (citizenAudio ? "#FF6A00" : null);
+        const activeColor = citizenColor || "#18181b";
+        const bgColor = citizenColor || "#fff";
+        const borderColor = citizenColor || "#18181b";
+
+        if (isActive) {
+          return `<div style="position:relative;width:24px;height:24px;box-sizing:border-box;"><div class="marker-pulse-ring" style="background:${activeColor};"></div><div style="position:relative;z-index:1;width:24px;height:24px;border-radius:50%;background:${activeColor};border:2px solid ${activeColor};box-sizing:border-box;"></div></div>`;
+        }
+        
+        return `<div style="width:18px;height:18px;border-radius:50%;background:${bgColor};border:2px solid ${borderColor};box-sizing:border-box;cursor:pointer;"></div>`;
+      }
+
+      // Helper para agregar marcador al mapa de manera dinámica y reutilizable
+      function addMarker(stop) {
+        if (markerRefs[stop.id]) return; // Evitar duplicar
+        
+        const el = document.createElement("div");
+        el.innerHTML = makeMarkerIcon(stop.id, false);
+        el.style.cursor = "pointer";
+        const marker = new maplibregl.Marker({ element: el })
+          .setLngLat([stop.coords[1], stop.coords[0]])
+          .addTo(map);
+
+        el.addEventListener("mouseenter", () => {
+          if (isMobile()) return;
+          if (hideTooltipTimeoutId) { clearTimeout(hideTooltipTimeoutId); hideTooltipTimeoutId = null; }
+          showTooltip(stop, el);
+        });
+        el.addEventListener("mouseleave", () => {
+          if (isMobile()) return;
+          if (hideTooltipTimeoutId) clearTimeout(hideTooltipTimeoutId);
+          hideTooltipTimeoutId = setTimeout(() => { hideTooltip(); hideTooltipTimeoutId = null; }, 200);
+        });
+        el.addEventListener("click", (e) => {
+          e.stopPropagation();
+          hideTooltip();
+          
+          if (mapSelectionMode) {
+            exitMapSelectionMode(false);
+            setLocationMode("existing");
+            selectedStopId = stop.id;
+            openUploadModal();
+          } else {
+            selectStop(stop.id);
+          }
+        });
+
+        markerRefs[stop.id] = marker;
+      }
+
+      function updateMarkers(activeId) {
+        stopsData.forEach((stop) => {
+          const m = markerRefs[stop.id];
+          if (!m) return;
+          m.getElement().innerHTML = makeMarkerIcon(stop.id, stop.id === activeId);
+        });
+      }
+
+      // ─── Seleccionar parada ────────────────────────────────────────────────
+
+      function selectStop(stopId) {
+        // En móvil, abrir el panel solo si está colapsado (estado 0 → 1).
+        // No forzamos el estado 2 para no tapar el mapa innecesariamente.
+        let targetState = panelState;
+        if (panelState === 0) {
+          targetState = 1;
+          setPanelState(1);
+        }
+
+        selectedStopId = stopId;
+
+        document.querySelectorAll(".stop-card").forEach((card) => {
+          card.classList.toggle("highlighted", parseInt(card.dataset.stopId) === stopId);
+        });
+        document.querySelectorAll(".stop-player-wrapper").forEach((w) => w.classList.remove("open"));
+
+        const player = document.getElementById(`player-${stopId}`);
+        if (player) player.classList.add("open");
+
+        const el = document.getElementById(`stop-card-${stopId}`);
+        if (el) {
+          // Pequeño delay para que la animación del panel no interfiera con el scroll
+          setTimeout(() => {
+            if (isMobile()) {
+              const panelInner = document.getElementById("panel-inner");
+              if (panelInner) {
+                panelInner.scrollTo({
+                  top: Math.max(0, el.offsetTop - 12),
+                  behavior: "smooth"
+                });
+              }
+            } else {
+              el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            }
+          }, 350);
+        }
+
+        updateMarkers(stopId);
+
+        const stop = stopsData.find((s) => s.id === stopId);
+        if (stop && map) {
+          map.flyTo({
+            center: [stop.coords[1], stop.coords[0]],
+            padding: getTargetMapPadding(targetState),
+            duration: 400
+          });
+        }
+      }
+
+      // ─── Mapa ──────────────────────────────────────────────────────────────
+
+      async function initMap() {
+        try {
+          const protocol = new pmtiles.Protocol();
+          maplibregl.addProtocol("pmtiles", protocol.tile);
+
+          // Fetch style and fix sprite URL (maplibre v5 requires absolute URLs)
+          const styleJSON = await fetch("/styles/positron.json").then(r => r.json());
+          styleJSON.sprite = window.location.origin + "/sprites/sprite";
+
+          const bounds = new maplibregl.LngLatBounds();
+          stopsData.forEach(stop => bounds.extend([stop.coords[1], stop.coords[0]]));
+
+          const basePadding = 60;
+          const panelPadding = getTargetMapPadding(1);
+          const initialPadding = {
+            top: basePadding,
+            left: basePadding,
+            bottom: basePadding + panelPadding.bottom,
+            right: basePadding + panelPadding.right
+          };
+
+          map = new maplibregl.Map({
+            container: "fonoteca-map",
+            style: styleJSON,
+            bounds: bounds,
+            fitBoundsOptions: { padding: initialPadding },
+            maxZoom: 18,
+            scrollZoom: false,
+            attributionControl: false,
+          });
+
+          map.addControl(new maplibregl.NavigationControl(), "top-left");
+
+          map.on("load", () => {
+            // Append custom attribution control to top-left control container
+            const topLeftCtrl = document.querySelector(".maplibregl-ctrl-top-left");
+            if (topLeftCtrl) {
+              const customAttribution = document.getElementById("custom-attribution");
+              if (customAttribution) {
+                customAttribution.style.display = "flex";
+                topLeftCtrl.appendChild(customAttribution);
+              }
+            }
+            stopsData.forEach(addMarker);
+
+            map.on("click", (e) => {
+              if (mapSelectionMode) {
+                pickerCoords = { lat: e.lngLat.lat, lng: e.lngLat.lng };
+                
+                exitMapSelectionMode(false);
+                setLocationMode("new");
+                
+                // Realizar geocodificación inversa
+                reverseGeocode(pickerCoords.lat, pickerCoords.lng);
+                
+                updateTempMarker(pickerCoords.lat, pickerCoords.lng);
+                openUploadModal();
+              } else {
+                hideTooltip();
+              }
+            });
+            setTimeout(() => map.resize(), 150);
+          });
+        } catch (e) {
+          console.error("Fonoteca map init error:", e);
+        }
+      }
+
+      // ─── Lista: click en paradas ───────────────────────────────────────────
+
+      stopsList.addEventListener("click", (e) => {
+        const header = e.target.closest(".stop-card-header");
+        if (!header) return;
+        const card = header.closest(".stop-card");
+        if (!card) return;
+        const stopId = parseInt(card.dataset.stopId);
+        const player = document.getElementById(`player-${stopId}`);
+        if (!player) return;
+        if (player.classList.contains("open")) {
+          // Ya abierto: cerrar
+          player.classList.remove("open");
+        } else {
+          selectStop(stopId);
+        }
+      });
+
+      // Evitar que el click en <audio> propague y cierre el player
+      stopsList.addEventListener("click", (e) => {
+        if (e.target.closest("audio")) e.stopPropagation();
+      });
+
+      // ─── Ordenación de paradas ─────────────────────────────────────────────
+      let userLocation = null;
+
+      async function getProximityOrder() {
+        if (userLocation) return userLocation;
+        return new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              userLocation = {
+                lat: position.coords.latitude,
+                lng: position.coords.longitude
+              };
+              resolve(userLocation);
+            },
+            (error) => reject(error),
+            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+          );
+        });
+      }
+
+      async function handleSortClick(btn) {
+        const criteria = btn.dataset.sort;
+
+        document.querySelectorAll(".sort-toggle-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+
+        if (criteria === "proximity") {
+          const proxBtn = document.getElementById("btn-sort-proximity");
+          const originalText = proxBtn.innerHTML;
+          proxBtn.textContent = "⏳ Buscando...";
+          try {
+            const loc = await getProximityOrder();
+            proxBtn.innerHTML = originalText;
+            applySort(criteria, loc);
+          } catch (err) {
+            console.error("Geolocation error:", err);
+            proxBtn.innerHTML = originalText;
+            alert("No se pudo obtener tu ubicación. Por favor, asegúrate de activar la geolocalización.");
+            const defBtn = document.querySelector('.sort-toggle-btn[data-sort="default"]');
+            if (defBtn) handleSortClick(defBtn);
+          }
+        } else {
+          applySort(criteria);
+        }
+      }
+
+      function applySort(criteria, userLoc) {
+        const sorted = [...stopsData];
+
+        if (criteria === "recent") {
+          sorted.sort((a, b) => b.id - a.id);
+        } else if (criteria === "proximity" && userLoc) {
+          const dist = (stop) => {
+            const dLat = stop.coords[0] - userLoc.lat;
+            const dLng = stop.coords[1] - userLoc.lng;
+            return dLat * dLat + dLng * dLng;
+          };
+          sorted.sort((a, b) => dist(a) - dist(b));
+        } else {
+          const originalOrder = stopsData.map(s => s.id);
+          sorted.sort((a, b) => originalOrder.indexOf(a.id) - originalOrder.indexOf(b.id));
+        }
+
+        const container = document.getElementById("stops-list");
+        if (container) {
+          sorted.forEach((stop) => {
+            const card = document.getElementById(`stop-card-${stop.id}`);
+            if (card) container.appendChild(card);
+          });
+        }
+      }
+
+      // ─── Modal de subida ciudadana ─────────────────────────────────────────
+
+      const uploadModal           = document.getElementById("upload-modal");
+      const uploadModalClose      = document.getElementById("upload-modal-close");
+      const uploadForm            = document.getElementById("upload-form");
+      const uploadFileInput       = document.getElementById("upload-file");
+      const uploadDropzone        = document.getElementById("upload-dropzone");
+      const uploadDropzoneLabel   = document.getElementById("upload-dropzone-label");
+      const uploadDropzoneIcon    = document.getElementById("upload-dropzone-icon");
+      const uploadProgressSection = document.getElementById("upload-progress-section");
+      const uploadProgressBar     = document.getElementById("upload-progress-bar");
+      const uploadProgressLabel   = document.getElementById("upload-progress-label");
+      const uploadSuccessSection  = document.getElementById("upload-success-section");
+      const uploadErrorDiv        = document.getElementById("upload-error");
+      const btnUploadAudio        = document.getElementById("btn-upload-audio");
+      const pickerCoordsEl        = document.getElementById("picker-coords");
+
+      // ── Location mode toggle ──
+      let locationMode = "existing"; // "existing" | "new"
+      let pickerCoords = null;       // { lat, lng } when in new mode
+      let mapSelectionMode = false;
+      let tempMarker = null;
+      let isChangingLocation = false;
+      let previousPanelState = 1;
+
+      // Variables para origen de audio (pestañas y grabadora)
+      let activeAudioSource   = "record"; // "upload" | "record"
+      let recordedFile        = null;     // Guardará el archivo de audio grabado
+      let uploadedFile        = null;     // Guardará el archivo de audio subido
+      let mediaRecorder       = null;
+      let audioChunks         = [];
+      let recordingStream     = null;
+      let recordTimerInterval = null;
+      let recordStartTime     = 0;
+      let recordElapsedSec    = 0;
+      let audioContext        = null;
+      let analyser            = null;
+      let visualizerAnimFrame = null;
+      const MAX_RECORD_TIME   = 300; // 5 minutos en segundos
+
+      // Elementos del DOM de la grabadora
+      const tabBtnUpload      = document.getElementById("tab-btn-upload");
+      const tabBtnRecord      = document.getElementById("tab-btn-record");
+      const audioTabUpload    = document.getElementById("audio-tab-upload");
+      const audioTabRecord    = document.getElementById("audio-tab-record");
+
+      const recStateReady     = document.getElementById("recorder-state-ready");
+      const recStateActive    = document.getElementById("recorder-state-active");
+      const recStatePreview   = document.getElementById("recorder-state-preview");
+      const recStateError     = document.getElementById("recorder-state-error");
+      const recErrorMsg       = document.getElementById("recorder-error-msg");
+
+      const btnRecordStart    = document.getElementById("btn-record-start");
+      const btnRecordPause    = document.getElementById("btn-record-pause");
+      const btnRecordStop     = document.getElementById("btn-record-stop");
+      const btnRecordDiscard  = document.getElementById("btn-record-discard");
+      const btnRecordRetry    = document.getElementById("btn-record-retry");
+      const recorderTimer     = document.getElementById("recorder-timer");
+      const previewAudio      = document.getElementById("recorder-preview-audio");
+      const visualizerCanvas  = document.getElementById("recorder-visualizer");
+
+      function setLocationMode(mode) {
+        locationMode = mode;
+        const nameField = document.getElementById("new-location-name-field");
+        const label = document.getElementById("location-field-label");
+        
+        if (mode === "existing") {
+          if (nameField) nameField.style.display = "none";
+          if (label) label.textContent = "Parada seleccionada";
+        } else {
+          if (nameField) nameField.style.display = "block";
+          if (label) label.textContent = "Ubicación seleccionada";
+        }
+      }
+
+      async function reverseGeocode(lat, lng) {
+        if (pickerCoordsEl) {
+          pickerCoordsEl.textContent = "⏳ Buscando dirección...";
+          pickerCoordsEl.className = "picker-coords";
+        }
+        try {
+          const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=es`;
+          const res = await fetch(url);
+          if (!res.ok) throw new Error("Error fetching address");
+          const data = await res.json();
+          if (data && data.address) {
+            const road = data.address.road || "";
+            const houseNumber = data.address.house_number || "";
+            let addressText = "";
+            if (road) {
+              addressText = road + (houseNumber ? `, ${houseNumber}` : "");
+            } else if (data.address.pedestrian) {
+              addressText = data.address.pedestrian + (houseNumber ? `, ${houseNumber}` : "");
+            } else if (data.address.suburb) {
+              addressText = data.address.suburb;
+            } else {
+              addressText = data.display_name.split(",").slice(0, 2).join(",");
+            }
+            if (pickerCoordsEl) {
+              pickerCoordsEl.textContent = `📍 ${addressText}`;
+              pickerCoordsEl.className = "picker-coords has-coords";
+            }
+          } else {
+            throw new Error("No address data");
+          }
+        } catch (err) {
+          console.error("Reverse geocoding error:", err);
+          if (pickerCoordsEl) {
+            pickerCoordsEl.textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+            pickerCoordsEl.className = "picker-coords has-coords";
+          }
+        }
+      }
+
+      // ─── Funciones del Mapa Selección ──────────────────────────────────────
+      function enterMapSelectionMode() {
+        if (mapSelectionMode) return;
+        mapSelectionMode = true;
+        isChangingLocation = false;
+        previousPanelState = panelState;
+
+        // Colapsar el panel inferior
+        setPanelState(0);
+
+        // Cambiar cursor del mapa
+        const mapEl = document.getElementById("fonoteca-map");
+        if (mapEl) mapEl.classList.add("selecting-location");
+
+        // Mostrar el banner superior
+        const banner = document.getElementById("map-selection-banner");
+        if (banner) {
+          banner.style.display = "block";
+          requestAnimationFrame(() => banner.classList.add("active"));
+        }
+
+        // Ocultar botones flotantes
+        const fab = document.getElementById("btn-upload-audio");
+        if (fab) fab.style.opacity = "0";
+        const paseoBtn = document.getElementById("btn-paseo-floating");
+        if (paseoBtn) paseoBtn.style.opacity = "0";
+      }
+
+      function exitMapSelectionMode(restorePanel = true) {
+        if (!mapSelectionMode) return;
+        mapSelectionMode = false;
+
+        // Restaurar cursor
+        const mapEl = document.getElementById("fonoteca-map");
+        if (mapEl) mapEl.classList.remove("selecting-location");
+
+        // Ocultar banner
+        const banner = document.getElementById("map-selection-banner");
+        if (banner) {
+          banner.classList.remove("active");
+          setTimeout(() => {
+            if (!mapSelectionMode) banner.style.display = "none";
+          }, 300);
+        }
+
+        // Mostrar de nuevo los botones flotantes
+        const fab = document.getElementById("btn-upload-audio");
+        if (fab) fab.style.opacity = "";
+        const paseoBtn = document.getElementById("btn-paseo-floating");
+        if (paseoBtn) paseoBtn.style.opacity = "";
+
+        // Restaurar panel
+        if (restorePanel) {
+          setPanelState(previousPanelState);
+        }
+      }
+
+      function updateTempMarker(lat, lng) {
+        if (tempMarker) {
+          tempMarker.setLngLat([lng, lat]);
+        } else {
+          const el = document.createElement("div");
+          el.innerHTML = `<div style="position:relative;width:24px;height:24px;box-sizing:border-box;"><div class="marker-pulse-ring" style="background:#ef4444;animation-duration:1.5s;"></div><div style="position:relative;z-index:1;width:24px;height:24px;border-radius:50%;background:#ef4444;border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.3);box-sizing:border-box;"></div></div>`;
+          tempMarker = new maplibregl.Marker({ element: el })
+            .setLngLat([lng, lat])
+            .addTo(map);
+        }
+
+        if (map) {
+          map.flyTo({
+            center: [lng, lat],
+            zoom: Math.max(map.getZoom(), 16),
+            duration: 350
+          });
+        }
+      }
+
+      function removeTempMarker() {
+        if (tempMarker) {
+          tempMarker.remove();
+          tempMarker = null;
+        }
+      }
+
+      function openUploadModal() {
+        uploadModal.classList.add("open");
+        uploadModal.setAttribute("aria-hidden", "false");
+        document.body.style.overflow = "hidden";
+        
+        // Si es parada existente, mostrar su nombre en el visor
+        if (locationMode === "existing" && selectedStopId) {
+          const stop = stopsData.find(s => s.id === selectedStopId);
+          if (stop && pickerCoordsEl) {
+            pickerCoordsEl.textContent = `📍 ${stop.name}`;
+            pickerCoordsEl.className = "picker-coords has-coords";
+          }
+          // Bloquear color si la parada ya tiene un aporte ciudadano con color
+          applyColorLockForStop(selectedStopId);
+        } else {
+          // Nueva parada: siempre desbloquear el selector
+          setColorPickerLocked(false);
+        }
+      }
+
+      function closeUploadModal(changingLocation = false) {
+        isChangingLocation = changingLocation;
+        uploadModal.classList.remove("open");
+        uploadModal.setAttribute("aria-hidden", "true");
+        document.body.style.overflow = "";
+        
+        if (!changingLocation) {
+          setTimeout(resetUploadModal, 300);
+        }
+      }
+
+      function resetUploadModal() {
+        // Si se cerró para cambiar de ubicación, no reseteamos el formulario
+        if (isChangingLocation) return;
+
+        uploadForm.style.display           = "block";
+        uploadProgressSection.style.display = "none";
+        uploadSuccessSection.style.display  = "none";
+        hideUploadError();
+        uploadForm.reset();
+        uploadDropzone.classList.remove("has-file");
+        uploadDropzoneIcon.textContent  = "🎙️";
+        uploadDropzoneLabel.textContent = "Arrastra un audio o haz clic para seleccionar";
+        
+        // Resetear modo
+        setLocationMode("existing");
+        pickerCoords = null;
+        if (pickerCoordsEl) {
+          pickerCoordsEl.textContent = "📍 Ninguna ubicación seleccionada";
+          pickerCoordsEl.className = "picker-coords";
+        }
+        
+        // Limpiar marcador temporal del mapa principal
+        removeTempMarker();
+
+        // Resetear origen de audio y grabadora
+        setAudioSource("record");
+        stopRecordingWorkflow(true);
+        uploadedFile = null;
+        if (uploadFileInput) uploadFileInput.value = "";
+      }
+
+      // ─── Funciones de la Grabadora de Audio ─────────────────────────────────
+
+      function setAudioSource(source) {
+        activeAudioSource = source;
+        if (source === "upload") {
+          tabBtnUpload?.classList.add("active");
+          tabBtnUpload?.setAttribute("aria-selected", "true");
+          tabBtnRecord?.classList.remove("active");
+          tabBtnRecord?.setAttribute("aria-selected", "false");
+          if (audioTabUpload) audioTabUpload.style.display = "block";
+          if (audioTabRecord) audioTabRecord.style.display = "none";
+          // Parar grabación si estaba activa
+          stopRecordingWorkflow(true);
+        } else {
+          tabBtnRecord?.classList.add("active");
+          tabBtnRecord?.setAttribute("aria-selected", "true");
+          tabBtnUpload?.classList.remove("active");
+          tabBtnUpload?.setAttribute("aria-selected", "false");
+          if (audioTabUpload) audioTabUpload.style.display = "none";
+          if (audioTabRecord) audioTabRecord.style.display = "block";
+        }
+      }
+
+      function showRecorderState(state) {
+        if (recStateReady)   recStateReady.style.display   = state === "ready" ? "flex" : "none";
+        if (recStateActive)  recStateActive.style.display  = state === "active" ? "flex" : "none";
+        if (recStatePreview) recStatePreview.style.display = state === "preview" ? "flex" : "none";
+        if (recStateError)   recStateError.style.display   = state === "error" ? "flex" : "none";
+      }
+
+      async function startRecordingWorkflow() {
+        audioChunks = [];
+        recordedFile = null;
+        recordElapsedSec = 0;
+        if (recorderTimer) recorderTimer.textContent = "00:00";
+
+        try {
+          // Solicitar micrófono
+          recordingStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          
+          // Crear MediaRecorder
+          let options = {};
+          if (MediaRecorder.isTypeSupported("audio/webm")) {
+            options = { mimeType: "audio/webm" };
+          } else if (MediaRecorder.isTypeSupported("audio/mp4")) {
+            options = { mimeType: "audio/mp4" };
+          } else if (MediaRecorder.isTypeSupported("audio/ogg")) {
+            options = { mimeType: "audio/ogg" };
+          }
+
+          mediaRecorder = new MediaRecorder(recordingStream, options);
+          
+          mediaRecorder.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) {
+              audioChunks.push(e.data);
+            }
+          };
+
+          mediaRecorder.onstop = () => {
+            const mimeType = mediaRecorder.mimeType || "audio/webm";
+            const blob = new Blob(audioChunks, { type: mimeType });
+            
+            let extension = "webm";
+            if (mimeType.includes("mp4")) extension = "mp4";
+            else if (mimeType.includes("ogg")) extension = "ogg";
+            else if (mimeType.includes("wav")) extension = "wav";
+
+            recordedFile = new File([blob], `grabacion_${Date.now()}.${extension}`, { type: mimeType });
+
+            const audioURL = URL.createObjectURL(blob);
+            if (previewAudio) previewAudio.src = audioURL;
+
+            showRecorderState("preview");
+            cleanupAudioContext();
+          };
+
+          mediaRecorder.start(250);
+
+          recordStartTime = Date.now();
+          recordTimerInterval = setInterval(updateRecordingTimer, 1000);
+
+          if (visualizerCanvas) {
+            initAudioVisualizer(recordingStream);
+          }
+
+          showRecorderState("active");
+          if (recStateActive) recStateActive.classList.remove("paused");
+          if (btnRecordPause) {
+            btnRecordPause.classList.remove("active");
+            btnRecordPause.innerHTML = `
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="10" y1="4" x2="10" y2="20"></line>
+                <line x1="14" y1="4" x2="14" y2="20"></line>
+              </svg>
+            `;
+          }
+        } catch (err) {
+          console.error("Error accessing microphone:", err);
+          let msg = "No se pudo acceder al micrófono. Por favor, revisa los permisos de tu navegador.";
+          if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+            msg = "Permiso de micrófono denegado. Actívalo en los ajustes de tu navegador para poder grabar.";
+          }
+          if (recErrorMsg) recErrorMsg.textContent = msg;
+          showRecorderState("error");
+          cleanupRecordingTracks();
+        }
+      }
+
+      function togglePauseRecordingWorkflow() {
+        if (!mediaRecorder || mediaRecorder.state === "inactive") return;
+
+        if (mediaRecorder.state === "recording") {
+          mediaRecorder.pause();
+          if (recStateActive) recStateActive.classList.add("paused");
+          if (btnRecordPause) {
+            btnRecordPause.classList.add("active");
+            btnRecordPause.innerHTML = `
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              </svg>
+            `;
+          }
+          if (recordTimerInterval) clearInterval(recordTimerInterval);
+        } else if (mediaRecorder.state === "paused") {
+          mediaRecorder.resume();
+          if (recStateActive) recStateActive.classList.remove("paused");
+          if (btnRecordPause) {
+            btnRecordPause.classList.remove("active");
+            btnRecordPause.innerHTML = `
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="10" y1="4" x2="10" y2="20"></line>
+                <line x1="14" y1="4" x2="14" y2="20"></line>
+              </svg>
+            `;
+          }
+          recordStartTime = Date.now() - (recordElapsedSec * 1000);
+          recordTimerInterval = setInterval(updateRecordingTimer, 1000);
+        }
+      }
+
+      function stopRecordingWorkflow(discard) {
+        if (recordTimerInterval) {
+          clearInterval(recordTimerInterval);
+          recordTimerInterval = null;
+        }
+
+        cleanupAudioContext();
+
+        if (mediaRecorder && mediaRecorder.state !== "inactive") {
+          mediaRecorder.stop();
+        }
+
+        cleanupRecordingTracks();
+
+        if (discard) {
+          audioChunks = [];
+          recordedFile = null;
+          if (previewAudio) previewAudio.src = "";
+          showRecorderState("ready");
+        }
+      }
+
+      function cleanupRecordingTracks() {
+        if (recordingStream) {
+          recordingStream.getTracks().forEach((track) => track.stop());
+          recordingStream = null;
+        }
+      }
+
+      function cleanupAudioContext() {
+        if (visualizerAnimFrame) {
+          cancelAnimationFrame(visualizerAnimFrame);
+          visualizerAnimFrame = null;
+        }
+        if (audioContext) {
+          if (audioContext.state !== "closed") {
+            audioContext.close();
+          }
+          audioContext = null;
+        }
+        analyser = null;
+      }
+
+      function updateRecordingTimer() {
+        recordElapsedSec = Math.floor((Date.now() - recordStartTime) / 1000);
+        
+        if (recordElapsedSec >= MAX_RECORD_TIME) {
+          recordElapsedSec = MAX_RECORD_TIME;
+          stopRecordingWorkflow(false);
+          return;
+        }
+
+        const min = String(Math.floor(recordElapsedSec / 60)).padStart(2, "0");
+        const sec = String(recordElapsedSec % 60).padStart(2, "0");
+        if (recorderTimer) recorderTimer.textContent = `${min}:${sec}`;
+      }
+
+      function initAudioVisualizer(stream) {
+        try {
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          const source = audioContext.createMediaStreamSource(stream);
+          analyser = audioContext.createAnalyser();
+          analyser.fftSize = 64;
+          source.connect(analyser);
+
+          const bufferLength = analyser.frequencyBinCount;
+          const dataArray = new Uint8Array(bufferLength);
+
+          const canvasContext = visualizerCanvas.getContext("2d");
+          if (!canvasContext) return;
+
+          const rect = visualizerCanvas.getBoundingClientRect();
+          visualizerCanvas.width = rect.width;
+          visualizerCanvas.height = rect.height;
+
+          function draw() {
+            if (!analyser) return;
+            visualizerAnimFrame = requestAnimationFrame(draw);
+
+            analyser.getByteFrequencyData(dataArray);
+
+            const width = visualizerCanvas.width;
+            const height = visualizerCanvas.height;
+
+            canvasContext.fillStyle = "#fafafa";
+            canvasContext.fillRect(0, 0, width, height);
+
+            const barCount = 18;
+            const barWidth = (width / barCount) - 3;
+            let x = 1.5;
+
+            for (let i = 0; i < barCount; i++) {
+              const dataIdx = Math.abs(i - Math.floor(barCount / 2));
+              const value = dataArray[dataIdx] || 0;
+              
+              const percent = value / 255;
+              const barHeight = Math.max(4, percent * (height - 8));
+              const y = (height - barHeight) / 2;
+
+              canvasContext.fillStyle = "#18181b";
+
+              canvasContext.beginPath();
+              if (canvasContext.roundRect) {
+                canvasContext.roundRect(x, y, barWidth, barHeight, 2);
+              } else {
+                canvasContext.rect(x, y, barWidth, barHeight);
+              }
+              canvasContext.fill();
+
+              x += barWidth + 3;
+            }
+          }
+
+          draw();
+        } catch (e) {
+          console.error("Error initializing visualizer:", e);
+        }
+      }
+
+      // ─── Selector de color del pin ──────────────────────────────────────────
+
+      let selectedPinColor = "#FF6A00"; // color por defecto
+
+      function selectSwatch(color) {
+        selectedPinColor = color;
+        // Actualizar estado visual de los swatches
+        document.querySelectorAll(".color-swatch").forEach(btn => {
+          btn.classList.toggle("selected", btn.dataset.color === color);
+        });
+        // Actualizar el input de color personalizado
+        const customInput = document.getElementById("upload-color-custom");
+        if (customInput) customInput.value = color;
+      }
+
+      function setColorPickerLocked(locked) {
+        document.querySelectorAll(".color-swatch").forEach(btn => {
+          btn.disabled = locked;
+        });
+        const customInput = document.getElementById("upload-color-custom");
+        if (customInput) customInput.disabled = locked;
+        const lockedNote = document.getElementById("color-locked-note");
+        if (lockedNote) lockedNote.classList.toggle("visible", locked);
+      }
+
+      function applyColorLockForStop(stopId) {
+        const stopObj = stopsData.find(s => s.id === stopId);
+        const citizenAudio = stopObj && stopObj.audios.find(a =>
+          a.origin === "citizen" || a.origin === "ciudadano" || a.category === "ciudadano"
+        );
+        if (citizenAudio && citizenAudio.pinColor) {
+          // La parada ya tiene color → forzar ese color y bloquear
+          selectSwatch(citizenAudio.pinColor);
+          setColorPickerLocked(true);
+        } else {
+          setColorPickerLocked(false);
+        }
+      }
+
+      // Event listeners de swatches
+      document.querySelectorAll(".color-swatch").forEach(btn => {
+        btn.addEventListener("click", () => {
+          if (!btn.disabled) selectSwatch(btn.dataset.color);
+        });
+      });
+
+      // Input de color personalizado
+      const colorCustomInput = document.getElementById("upload-color-custom");
+      colorCustomInput?.addEventListener("input", (e) => {
+        if (!colorCustomInput.disabled) {
+          selectedPinColor = e.target.value.toUpperCase();
+          // Quitar selected de todos los swatches (ninguno coincide con custom)
+          document.querySelectorAll(".color-swatch").forEach(btn => btn.classList.remove("selected"));
+        }
+      });
+
+      // ── Listeners de la grabadora ──
+
+      tabBtnUpload?.addEventListener("click", () => setAudioSource("upload"));
+      tabBtnRecord?.addEventListener("click", () => setAudioSource("record"));
+      btnRecordStart?.addEventListener("click", startRecordingWorkflow);
+      btnRecordPause?.addEventListener("click", togglePauseRecordingWorkflow);
+      btnRecordStop?.addEventListener("click", () => stopRecordingWorkflow(false));
+      btnRecordDiscard?.addEventListener("click", () => stopRecordingWorkflow(true));
+      btnRecordRetry?.addEventListener("click", startRecordingWorkflow);
+
+      btnUploadAudio?.addEventListener("click", enterMapSelectionMode);
+      
+      const btnCancelSelection = document.getElementById("btn-cancel-selection");
+      btnCancelSelection?.addEventListener("click", () => exitMapSelectionMode(true));
+
+      const btnChangeLocation = document.getElementById("btn-change-location");
+      btnChangeLocation?.addEventListener("click", () => {
+        closeUploadModal(true);
+        setTimeout(enterMapSelectionMode, 150);
+      });
+
+      uploadModalClose?.addEventListener("click", () => closeUploadModal(false));
+      uploadModal?.addEventListener("click", (e) => {
+        if (e.target === uploadModal) closeUploadModal(false);
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && uploadModal.classList.contains("open")) closeUploadModal(false);
+      });
+
+      // Drag-and-drop en la dropzone
+      uploadDropzone?.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        uploadDropzone.classList.add("drag-over");
+      });
+      uploadDropzone?.addEventListener("dragleave", () => {
+        uploadDropzone.classList.remove("drag-over");
+      });
+      uploadDropzone?.addEventListener("drop", (e) => {
+        e.preventDefault();
+        uploadDropzone.classList.remove("drag-over");
+        const file = e.dataTransfer?.files[0];
+        if (file) {
+          uploadedFile = file;
+          setSelectedFile(file);
+        }
+      });
+
+      uploadFileInput?.addEventListener("change", () => {
+        const file = uploadFileInput.files?.[0];
+        if (file) {
+          uploadedFile = file;
+          setSelectedFile(file);
+        }
+      });
+
+      function setSelectedFile(file) {
+        uploadDropzone.classList.add("has-file");
+        uploadDropzoneIcon.textContent = "🎵";
+        const sizeMB = (file.size / 1024 / 1024).toFixed(1);
+        uploadDropzoneLabel.textContent = `${file.name} (${sizeMB} MB)`;
+      }
+
+      function showUploadError(msg) {
+        uploadErrorDiv.textContent = msg;
+        uploadErrorDiv.style.display = "block";
+      }
+
+      function hideUploadError() {
+        uploadErrorDiv.style.display = "none";
+        uploadErrorDiv.textContent = "";
+      }
+
+      function setProgress(pct, label) {
+        uploadProgressBar.style.width  = `${pct}%`;
+        uploadProgressLabel.textContent = label;
+      }
+
+      uploadForm?.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        hideUploadError();
+
+        const description = document.getElementById("upload-description")?.value?.trim();
+        const author      = document.getElementById("upload-author")?.value?.trim();
+        let file = null;
+        if (activeAudioSource === "upload") {
+          file = uploadedFile;
+        } else if (activeAudioSource === "record") {
+          file = recordedFile;
+        }
+
+        // Validar según el modo de ubicación
+        let stopId = null;
+        let stopName = "";
+        let submissionCoords = null;
+
+        if (locationMode === "existing") {
+          stopId = selectedStopId;
+          if (!stopId) { showUploadError("Por favor selecciona una parada en el mapa."); return; }
+          const stop = stopsData.find((s) => s.id === parseInt(stopId));
+          stopName = stop?.name || "";
+        } else {
+          // Nueva parada
+          stopName = document.getElementById("upload-new-name")?.value?.trim() || "";
+          if (!stopName) { showUploadError("Por favor añade un nombre para el lugar."); return; }
+          if (!pickerCoords) { showUploadError("Por favor selecciona una ubicación en el mapa."); return; }
+          submissionCoords = pickerCoords;
+        }
+
+        if (!description) { showUploadError("Por favor añade una descripción del sonido."); return; }
+        if (!file) {
+          if (activeAudioSource === "upload") {
+            showUploadError("Por favor selecciona un archivo de audio.");
+          } else {
+            showUploadError("Por favor graba un sonido primero.");
+          }
+          return;
+        }
+        if (file.size > 100 * 1024 * 1024) { showUploadError("El archivo no puede superar los 100 MB."); return; }
+
+        const legalCheckbox = document.getElementById("upload-legal-checkbox");
+        if (legalCheckbox && !legalCheckbox.checked) {
+          showUploadError("Debes aceptar los Términos de Uso y la Política de Privacidad.");
+          return;
+        }
+
+        if (!uploadApiUrl) {
+          showUploadError("El servicio de subida no está disponible en este momento. Escríbenos a hola@colectivoradiopatio.com.");
+          return;
+        }
+
+        // Mostrar progreso
+        uploadForm.style.display = "none";
+        uploadProgressSection.style.display = "block";
+        setProgress(10, "Preparando subida…");
+
+        try {
+          // Paso 1: Obtener URL pre-firmada de la Lambda
+          const metaRes = await fetch(uploadApiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              filename:    file.name,
+              mimeType:    file.type || "audio/wav",
+              stopId:      stopId ? parseInt(stopId) : null,
+              stopName,
+              coords:      submissionCoords,  // { lat, lng } para nuevas paradas
+              isNewStop:   locationMode === "new",
+              description,
+              author:      author || "Anónimo",
+              pinColor:    selectedPinColor,
+            }),
+          });
+
+          if (!metaRes.ok) {
+            const errBody = await metaRes.text().catch(() => "");
+            throw new Error(`Error del servidor (${metaRes.status}): ${errBody.slice(0, 200)}`);
+          }
+
+          const { uploadUrl } = await metaRes.json();
+          if (!uploadUrl) throw new Error("La respuesta del servidor no incluye la URL de subida.");
+
+          setProgress(25, "Enviando sonido…");
+
+          // Paso 2: Subir el archivo directamente a S3 con XHR para tener progreso
+          await new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open("PUT", uploadUrl);
+            xhr.setRequestHeader("Content-Type", file.type || "audio/wav");
+
+            xhr.upload.onprogress = (ev) => {
+              if (ev.lengthComputable) {
+                const pct = 25 + Math.round((ev.loaded / ev.total) * 70);
+                setProgress(pct, `Subiendo… ${Math.round((ev.loaded / ev.total) * 100)}%`);
+              }
+            };
+
+            xhr.onload = () => {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                resolve(null);
+              } else {
+                reject(new Error(`Error al subir a S3 (${xhr.status})`));
+              }
+            };
+
+            xhr.onerror  = () => reject(new Error("Error de red al subir el archivo."));
+            xhr.ontimeout = () => reject(new Error("La subida tardó demasiado. Inténtalo de nuevo."));
+            xhr.timeout = 5 * 60 * 1000; // 5 min timeout
+
+            xhr.send(file);
+          });
+
+          setProgress(100, "¡Completado!");
+          setTimeout(() => {
+            uploadProgressSection.style.display = "none";
+            uploadSuccessSection.style.display  = "block";
+          }, 500);
+
+        } catch (err) {
+          console.error("Upload error:", err);
+          uploadProgressSection.style.display = "none";
+          uploadForm.style.display = "block";
+          showUploadError(`Error al enviar el audio: ${err.message}`);
+        }
+      });
+
+      // ─── Carga de Audios Aprobados Dinámicos ───────────────────────────────
+
+      function addStopCardToDOM(stop) {
+        const stopsList = document.getElementById("stops-list");
+        if (!stopsList) return;
+
+        // Comprobar si ya existe en el DOM
+        if (document.getElementById(`stop-card-${stop.id}`)) return;
+
+        const card = document.createElement("div");
+        card.className = "stop-card citizen-stop-card";
+        card.id = `stop-card-${stop.id}`;
+        card.dataset.stopId = stop.id;
+
+        card.innerHTML = `
+          <div class="stop-card-header">
+            <div class="stop-card-body">
+              <h3>${stop.name}</h3>
+              <p class="desc">${stop.description}</p>
+              <span class="meta" id="meta-${stop.id}">0 audios</span>
+            </div>
+          </div>
+          <div class="stop-player-wrapper" id="player-${stop.id}">
+            <div class="stop-player-inner"></div>
+          </div>
+        `;
+
+        stopsList.appendChild(card);
+      }
+
+      function addAudioToCardDOM(stopId, audio) {
+        const playerInner = document.querySelector(`#player-${stopId} .stop-player-inner`);
+        if (!playerInner) return;
+
+        const item = document.createElement("div");
+        item.className = "audio-item citizen-audio";
+        const pinColor = audio.pinColor || "#FF6A00";
+
+        const transcriptionHtml = audio.transcription ? `
+          <div class="transcription-container" style="margin-top:6px;">
+            <button
+              type="button"
+              class="transcription-toggle-btn"
+              style="display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;color:#71717a;background:none;border:none;padding:0;cursor:pointer;font-family:inherit;transition:color 0.15s;"
+              onmouseenter="this.style.color='#18181b'"
+              onmouseleave="if (this.nextElementSibling.classList.contains('hidden')) { this.style.color='#71717a'; } else { this.style.color='#18181b'; }"
+              onclick="
+                const container = this.nextElementSibling;
+                const textSpan = this.querySelector('.toggle-text');
+                const svg = this.querySelector('svg');
+                container.classList.toggle('hidden');
+                const isHidden = container.classList.contains('hidden');
+                textSpan.textContent = isHidden ? 'Ver transcripción' : 'Ocultar transcripción';
+                svg.style.transform = isHidden ? 'rotate(0deg)' : 'rotate(180deg)';
+              "
+            >
+              <span class="toggle-text">Ver transcripción</span>
+              <svg style="width:10px;height:10px;transition:transform 0.2s;transform-origin:center;transform:rotate(0deg);" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+              </svg>
+            </button>
+            <div class="hidden transcription-text" style="margin-top:6px;padding:10px 12px;background:#fafafa;border:1px solid #e4e4e7;border-radius:10px;font-size:11px;color:#52525b;line-height:1.5;white-space:pre-line;">${audio.transcription.trim()}</div>
+          </div>
+        ` : "";
+
+        item.innerHTML = `
+          <p class="audio-title" style="color:${pinColor}">${audio.title}</p>
+          <audio controls preload="none">
+            <source src="/audio/${encodeURIComponent(audio.file)}" type="audio/wav" />
+          </audio>
+          ${transcriptionHtml}
+        `;
+        playerInner.appendChild(item);
+      }
+
+      function updateStopCardMetas() {
+        stopsData.forEach(stop => {
+          const card = document.getElementById(`stop-card-${stop.id}`);
+          if (card) {
+            const metaSpan = card.querySelector(".meta");
+            if (metaSpan) {
+              const citizenAudios = stop.audios.filter(a => a.origin === "citizen" || a.origin === "ciudadano" || a.category === "ciudadano");
+              const generalText = `${stop.audios.length} audio${stop.audios.length !== 1 ? "s" : ""}`;
+              if (citizenAudios.length > 0) {
+                const pinColor = (citizenAudios[0] && citizenAudios[0].pinColor) || "#FF6A00";
+                metaSpan.innerHTML = `${generalText} · <span style="color:${pinColor};font-weight:600;">aporte ciudadano</span>`;
+              } else {
+                metaSpan.textContent = generalText;
+              }
+            }
+          }
+        });
+      }
+
+      async function loadApprovedAudios() {
+        try {
+          const res = await fetch(`/audio/approved.json?t=${Date.now()}`);
+          if (!res.ok) return;
+          const approvedList = await res.json();
+          if (!Array.isArray(approvedList)) return;
+
+          approvedList.forEach((item, index) => {
+            const tempId = 10000 + index;
+            if (item.isNewStop) {
+              // Nueva parada ciudadana
+              let stop = stopsData.find(s => s.name === item.stopName);
+              if (!stop) {
+                stop = {
+                  id: tempId,
+                  name: item.stopName,
+                  coords: [item.coords.lat, item.coords.lng],
+                  description: item.description || "Nueva parada ciudadana",
+                  address: item.stopName,
+                  audios: []
+                };
+                stopsData.push(stop);
+                
+                // Añadir al panel lateral
+                addStopCardToDOM(stop);
+                
+                // Si el mapa está inicializado, crear marcador
+                if (map) {
+                  addMarker(stop);
+                }
+              }
+              
+              const audioObj = {
+                title: `${item.description} — ${item.author}`,
+                file: item.audioFile,
+                duration: "Voz",
+                category: "ciudadano",
+                origin: "citizen",
+                pinColor: item.pinColor || null,
+              };
+              stop.audios.push(audioObj);
+              addAudioToCardDOM(stop.id, audioObj);
+            } else {
+              // Parada existente
+              const stop = stopsData.find(s => s.id === item.stopId);
+              if (stop) {
+                const audioObj = {
+                  title: `${item.description} — ${item.author}`,
+                  file: item.audioFile,
+                  duration: "Voz",
+                  category: "ciudadano",
+                  origin: "citizen",
+                  pinColor: item.pinColor || null,
+                };
+                stop.audios.push(audioObj);
+                addAudioToCardDOM(stop.id, audioObj);
+              }
+            }
+          });
+
+          // Actualizar etiquetas
+          updateStopCardMetas();
+          
+          // Re-renderizar marcadores en caso de que ya estuvieran cargados
+          if (map) {
+            updateMarkers(selectedStopId);
+          }
+        } catch (err) {
+          console.warn("No se pudieron cargar los audios aprobados:", err);
+        }
+      }
+
+      // ─── Init ──────────────────────────────────────────────────────────────
+
+      document.addEventListener("DOMContentLoaded", () => {
+        initMap().catch(e => console.error("Fonoteca map init error:", e));
+        loadApprovedAudios();
+        window.addEventListener("resize", () => { if (map) map.resize(); });
+
+        // Pausar otros audios al reproducir uno nuevo
+        document.addEventListener("play", (e) => {
+          if (e.target.tagName === "AUDIO") {
+            document.querySelectorAll("audio").forEach((a) => {
+              if (a !== e.target && !a.paused) a.pause();
+            });
+          }
+        }, true);
+
+        // Listeners de ordenación
+        document.querySelectorAll(".sort-toggle-btn").forEach((btn) => {
+          btn.addEventListener("click", () => handleSortClick(btn));
+        });
+
+        // Toggle de atribución personalizada
+        const customAttribution = document.getElementById("custom-attribution");
+        const btnInfoToggle     = document.getElementById("btn-info-toggle");
+        if (btnInfoToggle && customAttribution) {
+          btnInfoToggle.addEventListener("click", (e) => {
+            e.stopPropagation();
+            customAttribution.classList.toggle("open");
+          });
+          // Cerrar si se pulsa fuera
+          document.addEventListener("click", (e) => {
+            if (!customAttribution.contains(e.target)) {
+              customAttribution.classList.remove("open");
+            }
+          });
+        }
+
+        // Animación del botón flotante Paseo Sonoro
+        const paseoBtn = document.getElementById("btn-paseo-floating");
+        if (paseoBtn) {
+          setTimeout(() => {
+            paseoBtn.classList.add("collapsed");
+          }, 2200);
+        }
+      });
+    })();
+  </script>
+</DeliciasSuenaLayout>
