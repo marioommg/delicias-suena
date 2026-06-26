@@ -21,7 +21,7 @@ El proyecto nació como un ejercicio de escucha colectiva: caminamos por el barr
 
 ## 🛠️ Stack técnico
 
-- **[Astro 6](https://astro.build/)** — framework web
+- **[Astro 7](https://astro.build/)** — framework web
 - **[Tailwind CSS v4](https://tailwindcss.com/)** — estilos (configurado via `@theme`, sin `tailwind.config.js`)
 - **[MapLibre GL JS](https://maplibre.org/)** — mapa interactivo
 - **[PMTiles](https://protomaps.com/docs/pmtiles)** — tiles del mapa autoalojados (sin API keys)
