@@ -134,6 +134,6 @@ Puedes usar, modificar y redistribuir el código libremente. Si usas los conteni
 
 ## 🤝 Créditos
 
-Desarrollado por [Colectivo Radiopatio](https://colectivoradiopatio.com) — una radio comunitaria del barrio de Delicias, Madrid.
+Desarrollado por [Colectivo Radiopatio](https://colectivoradiopatio.com).
 
 Los datos de mapa provienen de © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), servidos mediante [Protomaps](https://protomaps.com/) (licencia ODbL).
