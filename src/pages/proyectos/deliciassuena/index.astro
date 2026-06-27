@@ -79,7 +79,7 @@ import mapa from "../../../assets/images/deliciassuena/mesa-de-trabajo-2.png";
             Elige tu camino
           </h2>
         </div>
-        <div class="grid md:grid-cols-2 gap-8">
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
           <a
             href="/proyectos/deliciassuena/paseo"
             class="group block w-full border border-zinc-900 rounded-2xl p-8 md:p-10 bg-white hover:bg-zinc-900 transition-all duration-300 text-left"
@@ -104,6 +104,20 @@ import mapa from "../../../assets/images/deliciassuena/mesa-de-trabajo-2.png";
               Para quien prefiere el archivo digital, buscar audios o escuchar desde casa.
             </span>
           </a>
+          <button
+            type="button"
+            id="btn-experiencia-inmersiva"
+            class="group block w-full border border-zinc-900 rounded-2xl p-8 md:p-10 bg-white hover:bg-zinc-900 transition-all duration-300 text-left cursor-pointer md:col-span-2 lg:col-span-1"
+          >
+            <span class="text-5xl block mb-4 opacity-60 group-hover:opacity-100 transition-opacity">03</span>
+            <span class="font-sans font-semibold text-xl md:text-2xl tracking-tight text-zinc-900 group-hover:text-white block mb-3 transition-colors">
+              Experiencia Sonora Inmersiva
+            </span>
+            <span class="font-sans text-base text-zinc-600 group-hover:text-zinc-300 leading-relaxed block mb-5 transition-colors">
+              Una pieza narrativa que entrelaza todas las voces, paisajes y músicas del recorrido en una sola escucha.
+            </span>
+
+          </button>
         </div>
       </div>
     </section>
@@ -233,6 +247,26 @@ import mapa from "../../../assets/images/deliciassuena/mesa-de-trabajo-2.png";
       </div>
     </section>
 
+    <div id="modal-experiencia-inmersiva" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm hidden" aria-hidden="true">
+      <div class="relative bg-white rounded-2xl max-w-lg w-full mx-4 p-8 md:p-10 shadow-2xl border border-zinc-200">
+        <button type="button" id="btn-cerrar-modal" class="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-zinc-100 hover:bg-zinc-200 transition-colors cursor-pointer" aria-label="Cerrar">
+          <svg class="w-4 h-4 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+        <span class="text-4xl block mb-3 opacity-40 font-sans font-semibold">03</span>
+        <h3 class="font-sans font-semibold text-2xl tracking-tight text-zinc-900 mb-3">
+          Experiencia Sonora Inmersiva
+        </h3>
+        <p class="font-sans text-base text-zinc-600 leading-relaxed mb-6">
+          Una pieza narrativa que entrelaza todas las voces, paisajes y músicas del recorrido en una sola escucha.
+        </p>
+        <audio controls preload="none" class="w-full h-9 rounded-lg" style="accent-color: #18181b;">
+          <source src={"/audio/" + encodeURIComponent("Paseo Sonoro.mpeg")} type="audio/mpeg" />
+        </audio>
+      </div>
+    </div>
+
     <footer class="px-6 py-12 md:px-12 md:py-16 max-w-5xl mx-auto">
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pt-8 border-t border-zinc-200">
         <p class="font-sans text-sm text-zinc-400 tracking-wide">
@@ -278,6 +312,38 @@ import mapa from "../../../assets/images/deliciassuena/mesa-de-trabajo-2.png";
       setTimeout(() => {
         if (!resolved) { resolved = true; done(); }
       }, 20000);
+    });
+
+    const modal = document.getElementById("modal-experiencia-inmersiva");
+    const btnAbrir = document.getElementById("btn-experiencia-inmersiva");
+    const btnCerrar = document.getElementById("btn-cerrar-modal");
+    const audio = modal?.querySelector("audio");
+
+    btnAbrir?.addEventListener("click", () => {
+      modal.classList.remove("hidden");
+      modal.setAttribute("aria-hidden", "false");
+    });
+
+    btnCerrar?.addEventListener("click", () => {
+      modal.classList.add("hidden");
+      modal.setAttribute("aria-hidden", "true");
+      if (audio) { audio.pause(); }
+    });
+
+    modal?.addEventListener("click", (e) => {
+      if (e.target === modal) {
+        modal.classList.add("hidden");
+        modal.setAttribute("aria-hidden", "true");
+        if (audio) { audio.pause(); }
+      }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && modal && !modal.classList.contains("hidden")) {
+        modal.classList.add("hidden");
+        modal.setAttribute("aria-hidden", "true");
+        if (audio) { audio.pause(); }
+      }
     });
   </script>
 </DeliciasSuenaLayout>
